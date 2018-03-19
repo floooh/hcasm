@@ -1,24 +1,41 @@
-import { HCAsm, Tokenizer } from "./hcasm";
-HCAsm.hello();
+import { Tokenizer, Parser } from "./hcasm";
 
-let t = new Tokenizer("hello: LD A,#$A0")
-while (t.next()) {
-    console.log(t.token.toString());
+function hex8(byte: number) {
+    return ('00' + byte.toString(16)).slice(-2).toUpperCase();
 }
-console.log('----')
-t = new Tokenizer("      ");
-while (t.next()) {
-    console.log(t.token.toString());
+
+function hex16(byte: number) {
+    return ('0000' + byte.toString(16)).slice(-4).toUpperCase();
 }
-console.log('----')
-t = new Tokenizer(`
-    .org $200
-    .z80
-bla:
-    LD A,#$10
-    djnz bla
+
+let tokens = Tokenizer.Tokenize("hello: LD A,#$A0")
+for (let t of tokens) {
+    console.log(t.toString());
+}
+
+tokens = Tokenizer.Tokenize(`
+        .org $200
+hello:  di
+        nop
+        exx
+        daa
+        ei
+        reti
 `)
-while (t.next()) {
-    console.log(t.token.toString());
+for (let t of tokens) {
+    console.log(t.toString());
 }
-
+let parser = new Parser();
+parser.Parse(tokens);
+if (parser.HasErrors()) {
+    parser.PrintErrors();
+}
+else {
+    for (let item of parser.items) {
+        let str = `${hex16(item.addr)}: `;
+        for (let byte of item.bytes) {
+            str += `${hex8(byte)} `;
+        }
+        console.log(str);
+    }
+}
