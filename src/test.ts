@@ -10,7 +10,7 @@ function hex16(byte: number) {
 
 let tokens = Tokenizer.Tokenize("hello: LD A,#$A0")
 for (let t of tokens) {
-    console.log(t.toString());
+    console.log(t.ToString());
 }
 
 tokens = Tokenizer.Tokenize(`
@@ -23,7 +23,7 @@ hello:  di
         reti
 `)
 for (let t of tokens) {
-    console.log(t.toString());
+    console.log(t.ToString());
 }
 let parser = new Parser();
 parser.Parse(tokens);

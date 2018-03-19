@@ -4,7 +4,7 @@
   "description": "Assembler for z80 and 6502 CPUs",
   "main": "index.js",
   "scripts": {
-    "test": "node dist/index.js"
+    "test": "node dist/test.js"
   },
   "repository": {
     "type": "git",
