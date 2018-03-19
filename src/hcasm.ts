@@ -40,7 +40,6 @@ export function TokenKindToString(kind: TokenKind): string {
 export class Token {
     kind: TokenKind = TokenKind.Invalid;
     str: string = null;
-    errorDesc: string = null;
     val: number = 0;
     lineNr: number = 0;
 
