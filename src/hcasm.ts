@@ -1,8 +1,11 @@
 
+function fatal_if(c: boolean, msg: string) {
+    if (c) throw msg;
+}
+
 export enum TokenKind {
     Invalid,
     Unknown,
-    Error,
     Control,                // .org, ...
     Name,                   // any string
     Number,                 // a number ($ prefix for hex, % prefix for binary)
@@ -20,7 +23,6 @@ export function TokenKindToString(kind: TokenKind): string {
     switch (kind) {
         case TokenKind.Invalid:         return "Invalid";
         case TokenKind.Unknown:         return "Unknown";
-        case TokenKind.Error:           return "Error";
         case TokenKind.Control:         return "Control";
         case TokenKind.Name:            return "Name";
         case TokenKind.Number:          return "Number";
@@ -71,12 +73,7 @@ export class Token {
         token.str = src.slice(start, end).toUpperCase();
         token.lineNr = lineNr;
         token.val = parseInt(token.str, 10);
-        if (isNaN(token.val)) {
-            // NOTE: this shouldn't happen since the tokenizer should stop on invalid characters
-            token.val = 0;
-            token.kind = TokenKind.Error;
-            token.errorDesc = `Failed parsing integer number: ${ token.str }`;
-        }
+        fatal_if(isNaN(token.val), `internal error: failed to parse ${token.str} as integer`);
         return token;
     }
 
@@ -86,12 +83,7 @@ export class Token {
         token.str = src.slice(start, end).toUpperCase();
         token.lineNr = lineNr;
         token.val = parseInt(token.str, 16);
-        if (isNaN(token.val)) {
-            // NOTE: this shouldn't happen since the tokenizer should stop on invalid characters
-            token.val = 0;
-            token.kind = TokenKind.Error;
-            token.errorDesc = `Failed parsing hex number: ${ token.str }`;
-        }
+        fatal_if(isNaN(token.val), `internal error: failed to parse ${token.str} as hex`);
         return token;
     }
 
@@ -101,12 +93,7 @@ export class Token {
         token.str = src.slice(start, end).toUpperCase();
         token.lineNr = lineNr;
         token.val = parseInt(token.str, 2);
-        if (isNaN(token.val)) {
-            // NOTE: this shouldn't happen since the tokenizer should stop on invalid characters
-            token.val = 0;
-            token.kind = TokenKind.Error;
-            token.errorDesc = `Failed parsing binary number: ${ token.str }`;
-        }
+        fatal_if(isNaN(token.val), `internal error: failed to parse ${token.str} as binary`);
         return token;
     }
 
