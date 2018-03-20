@@ -3,7 +3,6 @@ function fatal_if(c: boolean, msg: string) {
     if (c) throw msg;
 }
 
-// FIXME: merge-tokens (HL), (IX+d), (IY+d), ... which are merged in a second pass
 export enum TokenKind {
     Invalid,
     Unknown,
@@ -290,6 +289,32 @@ export class Tokenizer {
         }
     }
 }
+
+/** intermediate 'items', produced by Itemizer from token stream */
+enum ItemKind {
+    ORG,
+    Z80,
+    M6520,
+    OP,         // LD, ADD, ...
+    R8,         // B, C, D, E, H, L, A
+    I,          // I register
+    R,          // R regiser
+    BC,
+    DE,
+    HL,
+    SP,
+    AF,
+    IX,
+    IY,
+    Imm8,       // 8-bit immediate value
+    Imm16,      // 16-bit immediate value
+    iHL,        // (HL)
+    iBC,        // (BC)
+    iDE,        // (DE)
+    inn,        // (nn)
+    iIXd,       // (IX+d)
+    iIYd,       // (IY+d)
+};
 
 enum CPU {
     Z80,
