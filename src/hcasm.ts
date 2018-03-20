@@ -3,6 +3,7 @@ function fatal_if(c: boolean, msg: string) {
     if (c) throw msg;
 }
 
+// FIXME: merge-tokens (HL), (IX+d), (IY+d), ... which are merged in a second pass
 export enum TokenKind {
     Invalid,
     Unknown,
@@ -12,11 +13,13 @@ export enum TokenKind {
     String,                 // a string literal (everything between "")
     Label,                  // xxx:
     Comma,                  // ','
-    Imm,                    // '#'
+    Plus,                   // '+'
+    Pound,                  // '#'
     LeftBracket,            // '('
     RightBracket,           // ')'
     Comment,                // ';' to end of line
-    End                     // end of input stream
+    End,                    // end statement
+    EOF,                    // end-of-stream
 };
 
 export function TokenKindToString(kind: TokenKind): string {
@@ -29,11 +32,13 @@ export function TokenKindToString(kind: TokenKind): string {
         case TokenKind.String:          return "String";
         case TokenKind.Label:           return "Label";
         case TokenKind.Comma:           return "Comma";
-        case TokenKind.Imm:             return "Imm";
+        case TokenKind.Plus:            return "Plus";
+        case TokenKind.Pound:           return "Pound";
         case TokenKind.LeftBracket:     return "LeftBracket";
         case TokenKind.RightBracket:    return "RightBracket";
         case TokenKind.Comment:         return "Comment";
         case TokenKind.End:             return "End";
+        case TokenKind.EOF:             return "EOF";
     }
 }
 
@@ -230,9 +235,13 @@ export class Tokenizer {
                 this.advance_ignore();
                 return Token.Tag(TokenKind.Comma, this.lineNr);
             }
+            else if (c == '+') {
+                this.advance_ignore();
+                return Token.Tag(TokenKind.Plus, this.lineNr);
+            }
             else if (c == '#') {
                 this.advance_ignore();
-                return Token.Tag(TokenKind.Imm, this.lineNr);
+                return Token.Tag(TokenKind.Pound, this.lineNr);
             }
             else if (c == '(') {
                 this.advance_ignore();
@@ -308,6 +317,29 @@ export class Error {
     }
 }
 
+enum ArgKind {
+    Invalid = 0,
+    R8,     // A,B,C,D,E,H,L
+    R16,    // BC, DE, HL, AF, SP, IX, IY
+    iHL,    // (HL)
+    iBC,    // (BC)
+    iDE,    // (DE)
+    iIXYd,  // (IX+d) or (IY+d)
+    inn,    // (nn)
+    Imm,    // Immediate 8-bit or 16-bit value
+    I,      // I register
+    R,      // R register
+}
+
+class Arg {
+    kind: ArgKind = ArgKind.Invalid;
+    name: string = null;
+    val:  number = 0;
+    lo:   number = 0;
+    hi:   number = 0;
+    prefix: number = 0;
+}
+
 /**
  * The Parser takes an array of tokens as input and produces 
  * an array of Span items.
@@ -317,9 +349,22 @@ export class Parser {
     cpu: CPU = CPU.Z80;
     tokens: Array<Token>;
     index: number = 0;
-    token: Token;
     items: Array<Span> = new Array<Span>();
     errors: Array<Error> = new Array<Error>();
+    private _token: Token;
+
+    // see https://github.com/Microsoft/TypeScript/issues/9998
+    token(): Token {
+        return this._token;
+    }
+
+    next_token() {
+        this._token = this.tokens[this.index++];
+        if (this._token == undefined) {
+            this._token = new Token();
+            this._token.kind = TokenKind.EOF;
+        }
+    }
 
     Parse(tokens: Array<Token>) {
         this.tokens = tokens;
@@ -330,13 +375,14 @@ export class Parser {
         this.errors = new Array<Error>();
         let i = 0;
         let item = new Span();
-        while (this.next_token()) {
-            if (this.token == undefined) {
+        while (true) {
+            this.next_token();
+            if (this.token().kind == TokenKind.EOF) {
                 break;
             }
-            switch (this.token.kind) {
+            switch (this.token().kind) {
                 case TokenKind.Control:
-                    switch (this.token.str) {
+                    switch (this.token().str) {
                         case 'Z80':
                             this.cpu = CPU.Z80;
                             break;
@@ -345,8 +391,8 @@ export class Parser {
                             break;
                         case 'ORG':
                             this.next_token();
-                            if (this.expect_word()) {
-                                this.addr = this.token.val;
+                            if (this.expect_word(item)) {
+                                this.addr = this.token().val;
                             }
                             break;
                         case 'INCLUDE':
@@ -360,17 +406,17 @@ export class Parser {
                             // FIXME
                             break;
                         default:
-                            this.error(`unknown keyword: .${ this.token.str } `);
+                            this.error(item, `unknown keyword: .${ this.token().str } `);
                             break;
                     }
                     break;
                 case TokenKind.Label:
-                    if (this.expect_name()) {
-                        item.label = this.token.str;
+                    if (this.expect_name(item)) {
+                        item.label = this.token().str;
                     }
                     break;
                 case TokenKind.Name:
-                    if (this.expect_name()) {
+                    if (this.expect_name(item)) {
                         if (this.cpu == CPU.Z80) {
                             this.parse_z80_op(item)
                         }
@@ -380,7 +426,7 @@ export class Parser {
                     // a comment, ignore...
                     break;
                 default:
-                    this.error('unexpected token')
+                    this.error(item, 'unexpected token')
                     break;
             }
             if (item.valid) {
@@ -404,7 +450,7 @@ export class Parser {
 
     parse_z80_op(item: Span) {
         item.valid = true;
-        switch (this.token.str) {
+        switch (this.token().str) {
             /* simple mnemonics without args */
             case 'NOP':     item.bytes = [ 0x00 ]; break;
             case 'EXX':     item.bytes = [ 0xD9 ]; break;
@@ -452,49 +498,318 @@ export class Parser {
             case 'OTIR':    item.bytes = [ 0xED, 0xB3 ]; break;
             case 'OUTD':    item.bytes = [ 0xED, 0xAB ]; break;
             case 'OTDR':    item.bytes = [ 0xED, 0xBB ]; break;
+
+            /* load instructions */
+            case 'LD':      this.parse_z80_ld(item); break;
             default:
-                this.error(`Invalid Z80 instruction: ${ this.token.str }`)
+                this.error(item, `Invalid Z80 instruction: ${ this.token().str }`)
                 item.valid = false;
                 break;
         }
     }
-
-    next_token(): boolean {
-        this.token = this.tokens[this.index++];
-        return this.token != undefined;
+    
+    parse_z80_arg(item: Span): Arg {
+        let arg = new Arg();
+        this.next_token();
+        if (this.test_reg8()) {
+            // 8-bit register
+            arg.kind = ArgKind.R8;
+            arg.name = this.token().str;
+            switch (this.token().str) {
+                case 'B':   arg.val = 0b000; break;
+                case 'C':   arg.val = 0b001; break;
+                case 'D':   arg.val = 0b010; break;
+                case 'E':   arg.val = 0b011; break;
+                case 'H':   arg.val = 0b100; break;
+                case 'L':   arg.val = 0b101; break;
+                case 'A':   arg.val = 0b111; break;
+                default: fatal_if(true, 'invalid 8-bit register name');
+            }
+        }
+        else if (this.test_reg16()) {
+            // 16-bit register
+            arg.kind = ArgKind.R16;
+            arg.name = this.token().str;
+        }
+        else if ((this.token().kind == TokenKind.Name) && (this.token().str == 'I')) {
+            arg.kind = ArgKind.I;
+        }
+        else if ((this.token().kind == TokenKind.Name) && (this.token().str == 'R')) {
+            arg.kind = ArgKind.R;
+        }
+        else if (this.token().kind == TokenKind.LeftBracket) {
+            this.next_token();
+            if (this.token().kind == TokenKind.Number) {
+                if (this.expect_word(item)) {
+                    arg.kind = ArgKind.inn;
+                    arg.val = this.token().val;
+                    arg.lo = arg.val & 0xFF;
+                    arg.hi = (arg.val>>8) & 0xFF;
+                }
+            }
+            else if (this.token().kind == TokenKind.Name) {
+                switch (this.token().str) {
+                    case 'HL':  
+                        arg.kind = ArgKind.iHL; break;
+                    case 'BC':  
+                        arg.kind = ArgKind.iBC; break;
+                    case 'DE':  
+                        arg.kind = ArgKind.iDE; break;
+                    case 'IX':
+                    case 'IY':
+                        arg.kind = ArgKind.iIXYd;
+                        arg.name = this.token().str;
+                        arg.prefix = arg.name == 'IX' ? 0xDD : 0xFD;
+                        this.next_token();
+                        if (this.expect_plus(item)) {
+                            this.next_token();
+                            if (this.expect_byte(item)) {
+                                arg.val = this.token().val;
+                            }
+                        }
+                        break;
+                    default:
+                        this.error(item, "expected (HL), (BC), (DE), (IX+d) or (IY+d)");
+                        break;
+                }
+            }
+            this.next_token();
+            if (TokenKind.RightBracket != this.token().kind) {
+                this.error(item, "expected ')'");
+            }
+        }
+        else if (this.token().kind == TokenKind.Number) {
+            arg.kind = ArgKind.Imm;
+            arg.val = this.token().val;
+            arg.lo = arg.val & 0xFF;
+            arg.hi = (arg.val >> 8) & 0xFF;
+        }
+        return arg;
     }
 
-    expect_word(): boolean {
-        if (this.token == undefined) {
-            this.error('unexpected end of stream');
+    parse_z80_ld(item: Span) {
+        let dst = this.parse_z80_arg(item);
+        this.next_token();
+        if (this.expect_comma(item)) {
+            let src = this.parse_z80_arg(item);
+            if (dst.kind == ArgKind.R8) {
+                if (src.kind == ArgKind.R8) {
+                    // LD r,r'
+                    item.bytes = [ 0b01000000 | (dst.val<<3) | src.val ];
+                }
+                else if (src.kind == ArgKind.Imm) {
+                    // LD r,n
+                    if (this.expect_byte_val(src.val, item)) {
+                        item.bytes = [ 0x00000110 | (dst.val<<3), src.val ];
+                    }
+                }
+                else if (src.kind == ArgKind.iHL) {
+                    // LD r,(HL)
+                    item.bytes = [ 0b01000110 | (dst.val<<3) ];
+                }
+                else if (src.kind == ArgKind.iIXYd) {
+                    // LD r,(IX|IY+d)
+                    item.bytes = [ src.prefix, 0b01000110 | (dst.val<<3), src.val ];
+                }
+                else if (dst.name == 'A') {
+                    // special LD A,... ops
+                    if (src.kind == ArgKind.iBC) { 
+                        // LD A,(BC)
+                        item.bytes = [ 0x0A ];
+                    }
+                    else if (src.kind == ArgKind.iDE) {
+                        // LD A,(DE)
+                        item.bytes = [ 0x1A ];
+                    }
+                    else if (src.kind == ArgKind.I) {
+                        // LD A,I
+                        item.bytes = [ 0xED, 0x57 ];
+                    }
+                    else if (src.kind == ArgKind.R) {
+                        // LD A,R
+                        item.bytes = [ 0xED, 0x5F ];
+                    }
+                    else if (src.kind == ArgKind.inn) {
+                        // LD A,(nn)
+                        item.bytes = [ 0x3D, src.lo, src.hi ];
+                    }
+                    else {
+                        this.error(item, "expected (BC), (DE) or (nn)");
+                    }
+                }
+                else {
+                    this.error(item, "expected A..L, (HL), (IX+d), (IY+d) or byte value");
+                }
+            }
+            else if (dst.kind == ArgKind.iHL) {
+                if (src.kind == ArgKind.R8) {
+                    // LD (HL),r
+                    item.bytes = [ 0b01110000 | src.val ]
+                }
+                else if (src.kind == ArgKind.Imm) {
+                    // LD (HL),n
+                    if (this.expect_byte_val(src.val, item)) {
+                        item.bytes = [ 0x36, src.val ];
+                    }
+                }
+                else {
+                    this.error(item, "expected A..L or byte value")
+                }
+            }
+            else if (dst.kind == ArgKind.iIXYd) {
+                if (src.kind == ArgKind.R8) {
+                    // LD (HL),r
+                    item.bytes = [ dst.prefix, 0b01110000 | src.val ];
+                }
+                else if (src.kind == ArgKind.Imm) {
+                    // LD (HL),n
+                    if (this.expect_byte_val(src.val, item)) {
+                        item.bytes = [ dst.prefix, 0x36, dst.val, src.val ];
+                    }
+                }
+                else {
+                    this.error(item, "expected A..L or byte value")
+                }
+            }
+            else if (dst.kind == ArgKind.inn) {
+                // LD (nn),...
+                if (src.name = 'A') {
+                    // LD (nn),A
+                    item.bytes = [ 0x32, src.lo, src.hi];
+                }
+                else if (src.name == 'HL') {
+                    // LD (nn),HL
+                    item.bytes = [ 0x22, src.lo, src.hi ];
+                }
+                else if (src.name == 'BC') {
+                    // LD (nn),BC
+                    item.bytes = [ 0xED, 0x43, src.lo, src.hi ];
+                }
+                else if (src.name == 'DE') {
+                    // LD (nn),DE
+                    item.bytes = [ 0xED, 0x53, src.lo, src.hi ];
+                }
+                else if (src.name == 'SP') {
+                    // LD (nn),SP
+                    item.bytes = [ 0xED, 0x73, src.lo, src.hi ];
+                }
+                else if (src.name == 'IX') {
+                    // LD (nn),IX
+                    item.bytes = [ 0xDD, 0x22, src.lo, src.hi ];
+                }
+                else if (src.name == 'IY') {
+                    // LD (nn),IY
+                    item.bytes = [ 0xFD, 0x22, src.lo, src.hi ];
+                }
+                else {
+                    this.error(item, "expected A, HL, BC, DE, SP, IX or IY");
+                }
+            }
+            else {
+                this.error(item, "FIXME: more LD ops")
+            }
+        }
+    }
+
+    test_reg8(): boolean {
+        if (this.token().kind != TokenKind.Name) {
             return false;
         }
-        if (this.token.kind != TokenKind.Number) {
-            this.error('expected a value');
+        switch (this.token().str) {
+            case 'A': case 'B': case 'C': case 'D': case 'E': case 'H': case 'L':
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    test_reg16(): boolean {
+        if (this.token().kind != TokenKind.Name) {
             return false;
         }
-        if ((this.token.val < 0) || (this.token.val > 0xFFFF)) {
-            this.error('value too big (expected 16-bit value)');
+        switch (this.token().str) {
+            case 'AF': case 'SP': case 'BC': case 'DE': case 'HL': case 'IX': case 'IY':
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    eof(item: Span): boolean {
+        if (this.token().kind == TokenKind.EOF) {
+            this.error(item, 'unexpected end of stream');
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+
+    expect_byte_val(val: number, item: Span): boolean {
+        if ((val < 0) || (val > 0xFF)) {
+            this.error(item, 'value out of range (expected 8-bit value)');
+            return false;
         }
         return true;
     }
 
-    expect_name(): boolean {
-        if (this.token == undefined) {
-            this.error('unexpected end of stream');
-            return false;
-        }
-        if ((this.token.str == undefined) || (this.token.str == '')) {
-            this.error('expected a valid name');
+    expect_comma(item: Span): boolean {
+        if (this.eof(item)) { return false; }
+        if (this.token().kind != TokenKind.Comma) {
+            this.error(item, 'comma expected');
             return false;
         }
         return true;
     }
 
-    error(msg: string) {
-        this.errors.push(new Error(msg, this.token.lineNr));
+    expect_plus(item: Span): boolean {
+        if (this.eof(item)) { return false; }
+        if (this.token().kind != TokenKind.Plus) {
+            this.error(item, 'plus expected');
+            return false;
+        }
+        return true;
     }
 
+    expect_byte(item: Span): boolean {
+        if (this.eof(item)) { return false; }
+        if (this.token().kind != TokenKind.Number) {
+            this.error(item, '8-bit value expected');
+            return false;
+        }
+        if ((this.token().val < 0) || (this.token().val > 0xFF)) {
+            this.error(item, 'value out of range (expected 8-bit value)');
+            return false;
+        }
+        return true;
+    }
+
+    expect_word(item: Span): boolean {
+        if (this.eof(item)) { return false; }
+        if (this.token().kind != TokenKind.Number) {
+            this.error(item, '16-bit value expected');
+            return false;
+        }
+        if ((this.token().val < 0) || (this.token().val > 0xFFFF)) {
+            this.error(item, 'value out of range (expected 16-bit value)');
+            return false;
+        }
+        return true;
+    }
+
+    expect_name(item: Span): boolean {
+        if (this.eof(item)) { return false; }
+        if ((this.token().str == undefined) || (this.token().str == '')) {
+            this.error(item, 'name expected');
+            return false;
+        }
+        return true;
+    }
+
+    error(item: Span, msg: string) {
+        item.valid = false;
+        this.errors.push(new Error(msg, this.token().lineNr));
+    }
 }
 
 export class HCAsm {
