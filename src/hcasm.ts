@@ -3,6 +3,18 @@ function fatal_if(c: boolean, msg: string) {
     if (c) throw msg;
 }
 
+function fatal(msg: string) {
+    throw msg;
+}
+
+function is_8bit(val: number) {
+    return (val >= 0) && (val <= 0xFF);
+}
+
+function is_16bit(val: number) {
+    return (val >= 0) && (val <= 0xFF);
+}
+
 export enum TokenKind {
     Invalid,
     Unknown,
@@ -39,63 +51,63 @@ export class Token {
     kind: TokenKind = TokenKind.Invalid;
     str: string = null;
     num: number = 0;
-    lineNr: number = 0;
+    line: number = 0;
 
     /** return a new tag-token */
-    static Tag(kind: TokenKind, lineNr: number): Token {
+    static Tag(kind: TokenKind, line: number): Token {
         let token = new Token;
         token.kind = kind;
-        token.lineNr = lineNr;
+        token.line = line;
         return token;
     }
 
     /** return a new name-token */
-    static Name(kind: TokenKind, src: string, start: number, end: number, lineNr: number): Token {
+    static Name(kind: TokenKind, src: string, start: number, end: number, line: number): Token {
         let token = new Token();
         token.kind = kind;
         token.str = src.slice(start, end).toUpperCase();
-        token.lineNr = lineNr;
+        token.line = line;
         return token;
     }
 
     /** return a new string token (with un-escape) */
-    static String(src: string, start: number, end: number, lineNr: number): Token {
+    static String(src: string, start: number, end: number, line: number): Token {
         let token = new Token();
         token.kind = TokenKind.String;
         // FIXME unescape the string!
         token.str = src.slice(start, end).toUpperCase();
-        token.lineNr = lineNr;
+        token.line = line;
         return token;
     }
 
     /** return a new number token parsed as decimal number */
-    static Decimal(src: string, start: number, end: number, lineNr: number): Token {
+    static Decimal(src: string, start: number, end: number, line: number): Token {
         let token = new Token();
         token.kind = TokenKind.Number;
         token.str = src.slice(start, end).toUpperCase();
-        token.lineNr = lineNr;
+        token.line = line;
         token.num = parseInt(token.str, 10);
         fatal_if(isNaN(token.num), `internal error: failed to parse ${token.str} as integer`);
         return token;
     }
 
     /** return a new number token parsed as hex number */
-    static Hex(src: string, start: number, end: number, lineNr: number): Token {
+    static Hex(src: string, start: number, end: number, line: number): Token {
         let token = new Token();
         token.kind = TokenKind.Number;
         token.str = src.slice(start, end).toUpperCase();
-        token.lineNr = lineNr;
+        token.line = line;
         token.num = parseInt(token.str, 16);
         fatal_if(isNaN(token.num), `internal error: failed to parse ${token.str} as hex`);
         return token;
     }
 
     /** return a new number token parsed as binary number */
-    static Binary(src: string, start: number, end: number, lineNr: number): Token {
+    static Binary(src: string, start: number, end: number, line: number): Token {
         let token = new Token();
         token.kind = TokenKind.Number;
         token.str = src.slice(start, end).toUpperCase();
-        token.lineNr = lineNr;
+        token.line = line;
         token.num = parseInt(token.str, 2);
         fatal_if(isNaN(token.num), `internal error: failed to parse ${token.str} as binary`);
         return token;
@@ -104,13 +116,13 @@ export class Token {
     /** return a human-readable string with the token state (for debugging) */
     ToString(): string {
         if (TokenKind.Number === this.kind) {
-            return `${this.lineNr}: ${ TokenKindToString(this.kind) } ${ this.num}`
+            return `${this.line}: ${ TokenKindToString(this.kind) } ${ this.num}`
         }
         else if (this.str) {
-            return `${this.lineNr}: ${ TokenKindToString(this.kind) } ${ this.str }`
+            return `${this.line}: ${ TokenKindToString(this.kind) } ${ this.str }`
         }
         else {
-            return `${this.lineNr}: ${ TokenKindToString(this.kind) }`
+            return `${this.line}: ${ TokenKindToString(this.kind) }`
         }
     }
 }
@@ -124,7 +136,7 @@ export class Tokenizer {
     private pos: number = 0;
     private start: number = 0;
     private end: number = 0;
-    private lineNr: number = 0;
+    private line: number = 0;
     
     constructor(str: string) {
         this.src = str;
@@ -206,20 +218,20 @@ export class Tokenizer {
                 while (Tokenizer.isHexDigit(this.cur_char())) {
                     this.advance_take();
                 }
-                return Token.Hex(this.src, this.start, this.end, this.lineNr);
+                return Token.Hex(this.src, this.start, this.end, this.line);
             }
             else if (c === '%') {
                 this.advance_skip();
                 while (Tokenizer.isBinDigit(this.cur_char())) {
                     this.advance_take();
                 }
-                return Token.Binary(this.src, this.start, this.end, this.lineNr);
+                return Token.Binary(this.src, this.start, this.end, this.line);
             }
             else if (Tokenizer.isDecDigit(c)) { // a decimal number
                 while (Tokenizer.isDecDigit(this.cur_char())) {
                     this.advance_take();
                 }
-                return Token.Decimal(this.src, this.start, this.end, this.lineNr);
+                return Token.Decimal(this.src, this.start, this.end, this.line);
             }
             else if (c === '\"') {
                 this.advance_skip();
@@ -231,41 +243,41 @@ export class Tokenizer {
                     }
                 }
                 this.advance_ignore();
-                return Token.String(this.src, this.start, this.end, this.lineNr);
+                return Token.String(this.src, this.start, this.end, this.line);
             }
             else if (c === ',') {
                 this.advance_ignore();
-                return Token.Tag(TokenKind.Comma, this.lineNr);
+                return Token.Tag(TokenKind.Comma, this.line);
             }
             else if (c === '+') {
                 this.advance_ignore();
-                return Token.Tag(TokenKind.Plus, this.lineNr);
+                return Token.Tag(TokenKind.Plus, this.line);
             }
             else if (c === '#') {
                 this.advance_ignore();
-                return Token.Tag(TokenKind.Pound, this.lineNr);
+                return Token.Tag(TokenKind.Pound, this.line);
             }
-            else if (c == ':') {
+            else if (c === ':') {
                 this.advance_ignore();
-                return Token.Tag(TokenKind.Colon, this.lineNr);
+                return Token.Tag(TokenKind.Colon, this.line);
             }
             else if (c === '(') {
                 this.advance_ignore();
-                return Token.Tag(TokenKind.LeftBracket, this.lineNr);
+                return Token.Tag(TokenKind.LeftBracket, this.line);
             }
             else if (c === ')') {
                 this.advance_ignore();
-                return Token.Tag(TokenKind.RightBracket, this.lineNr);
+                return Token.Tag(TokenKind.RightBracket, this.line);
             }
             else if (Tokenizer.isAlnum(c)) {
                 while (Tokenizer.isAlnum(this.cur_char())) {
                     this.advance_take();
                 }
-                return Token.Name(TokenKind.Name, this.src, this.start, this.end, this.lineNr);
+                return Token.Name(TokenKind.Name, this.src, this.start, this.end, this.line);
             }
             else if (c === '\n') {
                 this.advance_ignore();
-                this.lineNr++;
+                this.line++;
             }
             else if (Tokenizer.isWhiteSpace(c)) {
                 this.advance_ignore();
@@ -273,14 +285,14 @@ export class Tokenizer {
             else if (c === ';') {
                 // a comment, skip to line end, and produce a separator token
                 this.advance_ignore();
-                while (Tokenizer.isWhiteSpace(this.cur_char())) {
+                while (!Tokenizer.isLineEnd(this.cur_char())) {
                     this.advance_ignore();
                 }
             }
             else {
                 // invalid character encountered
                 this.advance_ignore();
-                return Token.Tag(TokenKind.Unknown, this.lineNr);
+                return Token.Tag(TokenKind.Unknown, this.line);
             }
         }
     }
@@ -304,6 +316,7 @@ enum SyntaxItemKind {
     Z80IndIdx,  // Z80 indexed-indirect (IX+d) or (IY+d)
     Z80IndC,    // Z80 indirect (C)
     Z80IndImm,  // Z80 indirect-immediate 
+    EOF,        // end of syntax item stream
 };
 
 function SyntaxItemKindToString(kind: SyntaxItemKind): string {
@@ -324,6 +337,7 @@ function SyntaxItemKindToString(kind: SyntaxItemKind): string {
         case SyntaxItemKind.Z80IndIdx:  return "Z80IndIdx";
         case SyntaxItemKind.Z80IndC:    return "Z80IndC";
         case SyntaxItemKind.Z80IndImm:  return "Z80IndImm";
+        case SyntaxItemKind.EOF:        return "EOF";
         default: return "UNKNOWN";
     }
 }
@@ -437,6 +451,7 @@ let SyntaxNameMap: {[key:string]: SyntaxItemKind } = {
     'C':        SyntaxItemKind.Z80R8,
     'D':        SyntaxItemKind.Z80R8,
     'E':        SyntaxItemKind.Z80R8,
+    'H':        SyntaxItemKind.Z80R8,
     'L':        SyntaxItemKind.Z80R8,
     'A':        SyntaxItemKind.Z80R8,
     'I':        SyntaxItemKind.Z80RR,
@@ -456,8 +471,11 @@ class SyntaxItem {
     num: number = 0;
     lo:  number = 0;
     hi:  number = 0;
+    is8bit: boolean = false;    // true if 0<=num<(1<<8)
+    is16bit: boolean = false;   // true if 0<=num<(1<<16)
+    prefix: number = 0; // only for Z80IndIdx, 0xDD for IX, 0xFD for IY
     line: number = 0;
-    valid: boolean = true;
+    discard: boolean = false;
 
     ToString(): string {
         return `kind: ${SyntaxItemKindToString(this.kind)} str:${this.str} num:${this.num} line:${this.line}`
@@ -478,39 +496,14 @@ export class Error {
  * an array of SyntaxItems
  */
 export class Parser {
-    addr: number = 0;
+    tokenIndex: number = 0;
     tokens: Array<Token>;
-    index: number = 0;
     items: Array<SyntaxItem>;
     errors: Array<Error> = new Array<Error>();
 
-    private peek_token(): Token {
-        let token = this.tokens[this.index];
-        if (token === undefined) {
-            token = new Token();
-            token.kind = TokenKind.EOF;
-        }
-        return token;
-    }
-
-    private skip_token() {
-        this.index++;
-    }
-
-    private next_token(): Token {
-        let token = this.peek_token();
-        this.skip_token();
-        return token;
-    }
-
-    private error(item: SyntaxItem, msg: string) {
-        item.valid = false;
-        this.errors.push(new Error(msg, item.line));
-    }
-
-    Parse(tokens: Array<Token>) {
+    Parse(tokens: Array<Token>): Array<SyntaxItem> {
         this.tokens = tokens;
-        this.index = 0;
+        this.tokenIndex = 0;
         this.items = new Array<SyntaxItem>();
         this.errors = new Array<Error>();
         let i = 0;
@@ -520,7 +513,7 @@ export class Parser {
             if (token.kind === TokenKind.EOF) {
                 break;
             }
-            item.line = token.lineNr;
+            item.line = token.line;
             if (token.kind === TokenKind.Comma) {
                 // comma separators are passed through
                 item.kind = SyntaxItemKind.Comma;
@@ -532,6 +525,8 @@ export class Parser {
                 item.num = token.num;
                 item.lo  = token.num & 0xFF;
                 item.hi  = (token.num>>8) & 0xFF;
+                item.is8bit = is_8bit(token.num);
+                item.is16bit = is_16bit(token.num);
             }
             else if (token.kind === TokenKind.String) {
                 // pass through string literals
@@ -547,6 +542,12 @@ export class Parser {
                 else if (token.str in SyntaxNameMap) {
                     item.kind = SyntaxNameMap[token.str];
                     item.str = token.str;
+                    if (token.str === 'IX') {
+                        item.prefix = 0xDD;
+                    }
+                    else if (token.str === 'IY') {
+                        item.prefix = 0xFD;
+                    }
                 }
                 else {
                     item.kind = SyntaxItemKind.Name;
@@ -561,6 +562,11 @@ export class Parser {
                     item.num = token.num;
                     item.lo = token.num & 0xFF;
                     item.hi = (token.num>>8) & 0xFF;
+                    item.is8bit = is_8bit(token.num);
+                    item.is16bit = is_16bit(token.num);
+                    if (!item.is16bit) {
+                        this.error(item, "16-bit integer overflow!");
+                    }
                 }
                 else if (token.kind === TokenKind.Name) {
                     item.str = token.str;
@@ -576,6 +582,7 @@ export class Parser {
                             break;
                         case 'IX':
                         case 'IY':
+                            item.prefix = token.str === 'IX' ? 0xDD : 0xFD;
                             token = this.next_token();
                             if (token.kind === TokenKind.Plus) {
                                 // (IX+d) or (IY+d)
@@ -584,10 +591,15 @@ export class Parser {
                                 if (token.kind === TokenKind.Number) {
                                     item.num = token.num;
                                     item.lo = token.num & 0xFF;
-                                    item.hi = (token.num>>8) && 0xFF;
+                                    item.hi = 0;
+                                    item.is8bit = is_8bit(token.num);
+                                    item.is16bit = is_16bit(token.num);
+                                    if (!item.is8bit) {
+                                        this.error(item, "d in (IX/IY+d) must be an 8-bit value")
+                                    }
                                 }
                                 else {
-                                    this.error(item, "expected offset in (IX+d) / (IY+d)")
+                                    this.error(item, "expected offset in (IX+d)/(IY+d)")
                                 }
                             }
                             else {
@@ -607,10 +619,11 @@ export class Parser {
             else {
                 this.error(item, `unhandled token: ${ TokenKindToString(token.kind )}`);
             }
-            if (item.valid) {
+            if (!item.discard) {
                 this.items.push(item);
             }
         }
+        return this.items;
     }
     
     HasErrors(): boolean {
@@ -623,192 +636,462 @@ export class Parser {
         }
     }
 
-    /*
-    parse_z80_op(item: Span) {
-        item.valid = true;
-        switch (this.token().str) {
-            // simple mnemonics without args 
-            case 'NOP':     item.bytes = [ 0x00 ]; break;
-            case 'EXX':     item.bytes = [ 0xD9 ]; break;
-            case 'LDI':     item.bytes = [ 0xED, 0xA0 ]; break;
-            case 'LDIR':    item.bytes = [ 0xED, 0xB0 ]; break;
-            case 'LDD':     item.bytes = [ 0xED, 0xA8 ]; break;
-            case 'LDDR':    item.bytes = [ 0xED, 0xB8 ]; break;
-            case 'CPI':     item.bytes = [ 0xED, 0xA1 ]; break;
-            case 'CPIR':    item.bytes = [ 0xED, 0xB1 ]; break; 
-            case 'CPD':     item.bytes = [ 0xED, 0xA9 ]; break;
-            case 'CPDR':    item.bytes = [ 0xED, 0xB9 ]; break;
-            case 'DAA':     item.bytes = [ 0x27 ]; break;
-            case 'CPL':     item.bytes = [ 0x2F ]; break;
-            case 'NEG':     item.bytes = [ 0xED, 0x44 ]; break;
-            case 'CCF':     item.bytes = [ 0x3F ]; break;
-            case 'SCF':     item.bytes = [ 0x37 ]; break;
-            case 'HALT':    item.bytes = [ 0x76 ]; break;
-            case 'DI':      item.bytes = [ 0xF3 ]; break;
-            case 'EI':      item.bytes = [ 0xFB ]; break;
-            case 'IM0':     item.bytes = [ 0xED, 0x46 ]; break;
-            case 'IM1':     item.bytes = [ 0xED, 0x56 ]; break;
-            case 'IM2':     item.bytes = [ 0xED, 0x5E ]; break;
-            case 'RLCA':    item.bytes = [ 0x07 ]; break;
-            case 'RLA':     item.bytes = [ 0x17 ]; break;
-            case 'RRCA':    item.bytes = [ 0x0F ]; break;
-            case 'RRA':     item.bytes = [ 0x1F ]; break;
-            case 'RLD':     item.bytes = [ 0xED, 0x6F ]; break;
-            case 'RRD':     item.bytes = [ 0xED, 0x67 ]; break;
-            case 'RET':     item.bytes = [ 0xC9 ]; break;
-            case 'RETNZ':   item.bytes = [ 0xC0 ]; break;
-            case 'RETZ':    item.bytes = [ 0xC8 ]; break;
-            case 'RETNC':   item.bytes = [ 0xD0 ]; break;
-            case 'RETC':    item.bytes = [ 0xD8 ]; break;
-            case 'RETPO':   item.bytes = [ 0xE0 ]; break;
-            case 'RETPE':   item.bytes = [ 0xE8 ]; break;
-            case 'RETP':    item.bytes = [ 0xF0 ]; break;
-            case 'RETM':    item.bytes = [ 0xF8 ]; break;
-            case 'RETI':    item.bytes = [ 0xED, 0x4D ]; break;
-            case 'RETN':    item.bytes = [ 0xED, 0x45 ]; break;
-            case 'INI':     item.bytes = [ 0xED, 0xA2 ]; break;
-            case 'INIR':    item.bytes = [ 0xED, 0xB2 ]; break;
-            case 'IND':     item.bytes = [ 0xED, 0xAA ]; break;
-            case 'INDR':    item.bytes = [ 0xED, 0xBA ]; break;
-            case 'OUTI':    item.bytes = [ 0xED, 0xA3 ]; break;
-            case 'OTIR':    item.bytes = [ 0xED, 0xB3 ]; break;
-            case 'OUTD':    item.bytes = [ 0xED, 0xAB ]; break;
-            case 'OTDR':    item.bytes = [ 0xED, 0xBB ]; break;
-            default:
-                this.error(item, `Invalid Z80 instruction: ${ this.token().str }`)
-                item.valid = false;
-                break;
+    private peek_token(): Token {
+        let token = this.tokens[this.tokenIndex];
+        if (token === undefined) {
+            token = new Token();
+            token.kind = TokenKind.EOF;
+        }
+        return token;
+    }
+
+    private skip_token() {
+        this.tokenIndex++;
+    }
+
+    private next_token(): Token {
+        let token = this.peek_token();
+        this.skip_token();
+        return token;
+    }
+
+    private error(item: SyntaxItem, msg: string) {
+        item.discard = true;
+        this.errors.push(new Error(msg, item.line));
+    }
+
+}
+
+/** ByteRanges is what the Assembler generates from SyntaxItem objects */
+export class ByteRange {
+    addr: number = 0;
+    bytes: Array<number>;
+    line: number = 0;
+    label: string = null;
+    ready: boolean = false;
+    discard: boolean = false;
+}
+
+/** supported CPU types */
+enum CPUType {
+    None,
+    Z80,
+    M6502
+}
+
+/** the Assembler converts a stream of SyntaxItem objects into byte ranges */
+export class Assembler {
+    addr: number = 0
+    cpu: CPUType = CPUType.None
+    syntaxItemIndex: number = 0
+    syntaxItems: Array<SyntaxItem>
+    byteRanges: Array<ByteRange>
+    errors: Array<Error> = new Array<Error>()
+
+    Assemble(syntaxItems: Array<SyntaxItem>): Array<ByteRange> {
+        this.syntaxItems = syntaxItems
+        this.syntaxItemIndex = 0
+        this.byteRanges = new Array<ByteRange>()
+        this.errors = new Array<Error>()
+        let outp = new ByteRange()
+        while (true) {
+            let inp = this.next_item()
+            if (inp.kind === SyntaxItemKind.EOF) {
+                break
+            }
+            outp.line = inp.line
+            outp.addr = this.addr
+            if (inp.kind === SyntaxItemKind.Keyword) {
+                switch (inp.str) {
+                    case 'ORG':
+                        inp = this.next_item()
+                        this.addr = inp.num
+                        outp.discard = true
+                        break
+                    case 'Z80':
+                        this.cpu = CPUType.Z80
+                        outp.discard = true
+                        break
+                    case 'M6502':
+                        this.cpu = CPUType.M6502
+                        outp.discard = true
+                        break
+                    case 'INCLUDE':
+                    case 'INCBIN':
+                    case 'DB':
+                    case 'DW':
+                    case 'CONST':
+                    case 'MACRO':
+                    case 'ENDM':
+                    case 'END': 
+                        this.error(outp, `${ inp.str }: NOT IMPLEMENTED YET!`)
+                        break
+                }
+            }
+            else if (inp.kind === SyntaxItemKind.Label) {
+                outp.label = inp.str
+            }
+            else if (inp.kind === SyntaxItemKind.Z80Op) {
+                this.asmZ80Op(inp, outp)
+            }
+            if (outp.discard) {
+                outp = new ByteRange()
+            }
+            else if (outp.ready) {
+                this.byteRanges.push(outp)
+                this.addr += outp.bytes.length
+                outp = new ByteRange()
+            }
+        }
+        return this.byteRanges
+    }
+
+    HasErrors(): boolean {
+        return this.errors.length > 0
+    }
+
+    PrintErrors() {
+        for (let err of this.errors) {
+            console.log(`error in line ${ err.line }: ${ err.msg }`)
         }
     }
-    
-    parse_z80_ld(item: Span) {
-        let dst = this.parse_z80_arg(item);
-        this.next_token();
-        if (this.expect_comma(item)) {
-            let src = this.parse_z80_arg(item);
-            if (dst.kind == ArgKind.R8) {
-                if (src.kind == ArgKind.R8) {
-                    // LD r,r'
-                    item.bytes = [ 0b01000000 | (dst.val<<3) | src.val ];
-                }
-                else if (src.kind == ArgKind.Imm) {
-                    // LD r,n
-                    if (this.expect_byte_val(src.val, item)) {
-                        item.bytes = [ 0x00000110 | (dst.val<<3), src.val ];
-                    }
-                }
-                else if (src.kind == ArgKind.iHL) {
-                    // LD r,(HL)
-                    item.bytes = [ 0b01000110 | (dst.val<<3) ];
-                }
-                else if (src.kind == ArgKind.iIXYd) {
-                    // LD r,(IX|IY+d)
-                    item.bytes = [ src.prefix, 0b01000110 | (dst.val<<3), src.val ];
-                }
-                else if (dst.name == 'A') {
-                    // special LD A,... ops
-                    if (src.kind == ArgKind.iBC) { 
-                        // LD A,(BC)
-                        item.bytes = [ 0x0A ];
-                    }
-                    else if (src.kind == ArgKind.iDE) {
-                        // LD A,(DE)
-                        item.bytes = [ 0x1A ];
-                    }
-                    else if (src.kind == ArgKind.I) {
+
+    private asmZ80Op(inp: SyntaxItem, outp: ByteRange) {
+        outp.ready = true
+        switch (inp.str) {
+            // simple ops without operands
+            case 'NOP':     outp.bytes = [ 0x00 ]; break
+            case 'EXX':     outp.bytes = [ 0xD9 ]; break
+            case 'LDI':     outp.bytes = [ 0xED, 0xA0 ]; break
+            case 'LDIR':    outp.bytes = [ 0xED, 0xB0 ]; break
+            case 'LDD':     outp.bytes = [ 0xED, 0xA8 ]; break
+            case 'LDDR':    outp.bytes = [ 0xED, 0xB8 ]; break
+            case 'CPI':     outp.bytes = [ 0xED, 0xA1 ]; break
+            case 'CPIR':    outp.bytes = [ 0xED, 0xB1 ]; break 
+            case 'CPD':     outp.bytes = [ 0xED, 0xA9 ]; break
+            case 'CPDR':    outp.bytes = [ 0xED, 0xB9 ]; break
+            case 'DAA':     outp.bytes = [ 0x27 ]; break
+            case 'CPL':     outp.bytes = [ 0x2F ]; break
+            case 'NEG':     outp.bytes = [ 0xED, 0x44 ]; break
+            case 'CCF':     outp.bytes = [ 0x3F ]; break
+            case 'SCF':     outp.bytes = [ 0x37 ]; break
+            case 'HALT':    outp.bytes = [ 0x76 ]; break
+            case 'DI':      outp.bytes = [ 0xF3 ]; break
+            case 'EI':      outp.bytes = [ 0xFB ]; break
+            case 'IM0':     outp.bytes = [ 0xED, 0x46 ]; break
+            case 'IM1':     outp.bytes = [ 0xED, 0x56 ]; break
+            case 'IM2':     outp.bytes = [ 0xED, 0x5E ]; break
+            case 'RLCA':    outp.bytes = [ 0x07 ]; break
+            case 'RLA':     outp.bytes = [ 0x17 ]; break
+            case 'RRCA':    outp.bytes = [ 0x0F ]; break
+            case 'RRA':     outp.bytes = [ 0x1F ]; break
+            case 'RLD':     outp.bytes = [ 0xED, 0x6F ]; break
+            case 'RRD':     outp.bytes = [ 0xED, 0x67 ]; break
+            case 'RET':     outp.bytes = [ 0xC9 ]; break
+            case 'RETNZ':   outp.bytes = [ 0xC0 ]; break
+            case 'RETZ':    outp.bytes = [ 0xC8 ]; break
+            case 'RETNC':   outp.bytes = [ 0xD0 ]; break
+            case 'RETC':    outp.bytes = [ 0xD8 ]; break
+            case 'RETPO':   outp.bytes = [ 0xE0 ]; break
+            case 'RETPE':   outp.bytes = [ 0xE8 ]; break
+            case 'RETP':    outp.bytes = [ 0xF0 ]; break
+            case 'RETM':    outp.bytes = [ 0xF8 ]; break
+            case 'RETI':    outp.bytes = [ 0xED, 0x4D ]; break
+            case 'RETN':    outp.bytes = [ 0xED, 0x45 ]; break
+            case 'INI':     outp.bytes = [ 0xED, 0xA2 ]; break
+            case 'INIR':    outp.bytes = [ 0xED, 0xB2 ]; break
+            case 'IND':     outp.bytes = [ 0xED, 0xAA ]; break
+            case 'INDR':    outp.bytes = [ 0xED, 0xBA ]; break
+            case 'OUTI':    outp.bytes = [ 0xED, 0xA3 ]; break
+            case 'OTIR':    outp.bytes = [ 0xED, 0xB3 ]; break
+            case 'OUTD':    outp.bytes = [ 0xED, 0xAB ]; break
+            case 'OTDR':    outp.bytes = [ 0xED, 0xBB ]; break
+            case 'LD':      this.asmZ80LD(outp); break
+            default:
+                this.error(outp, `FIXME: Z80 OP ${inp.str}`)
+                break
+        }
+    }
+
+    private static z80R8bits(r8: string): number {
+        switch (r8) {
+            case 'B': return 0b000
+            case 'C': return 0b001
+            case 'D': return 0b010
+            case 'E': return 0b011
+            case 'H': return 0b100
+            case 'L': return 0b101
+            case 'A': return 0b111
+            default:
+                fatal('invalid z80 8-bit register name!')
+                return 0
+        }
+    }
+
+    private static z80R16bits(r16: string): number {
+        switch (r16) {
+            case 'BC': return 0b00
+            case 'DE': return 0b01
+            case 'HL': return 0b10
+            case 'SP': return 0b11
+            default:
+                fatal('invalid z80 16-bit register name!')
+                return 0
+        }
+    }
+
+    asmZ80LD(outp: ByteRange) {
+        // LD left,right
+        let l = this.next_item()
+        let c = this.next_item()
+        let r = this.next_item()
+        if (c.kind !== SyntaxItemKind.Comma) {
+            this.error(outp, "comma expected")
+            return
+        }
+        switch (l.kind) {
+            case SyntaxItemKind.Z80R8:
+                // LD r,...
+                switch (r.kind) {
+                    case SyntaxItemKind.Number:
+                        // LD r,n
+                        if (this.expect_8bit(outp, r.num)) {
+                            let lbits = Assembler.z80R8bits(l.str)
+                            outp.bytes = [ 0b00000110 | lbits<<3, r.num ]
+                        }
+                        break
+                    case SyntaxItemKind.Z80R8:
+                        // LD r,r'
+                        {
+                            const lbits = Assembler.z80R8bits(l.str)
+                            const rbits = Assembler.z80R8bits(r.str)
+                            outp.bytes = [ 0b01000000 | lbits<<3 | rbits ]
+                        }
+                        break
+                    case SyntaxItemKind.Z80RI:
                         // LD A,I
-                        item.bytes = [ 0xED, 0x57 ];
-                    }
-                    else if (src.kind == ArgKind.R) {
+                        if (l.str === 'A') { outp.bytes = [ 0xED, 0x57 ] }
+                        else { this.error(outp, 'I can only be loaded into A') }
+                        break
+                    case SyntaxItemKind.Z80RR:
                         // LD A,R
-                        item.bytes = [ 0xED, 0x5F ];
-                    }
-                    else if (src.kind == ArgKind.inn) {
+                        if (l.str === 'A') { outp.bytes = [ 0xED, 0x5F ] }
+                        else { this.error(outp, 'R can only be loaded into A') }
+                        break
+                    case SyntaxItemKind.Z80IndR16:
+                        // LD r,(HL) LD A,(BC) LD A,(DE)
+                        if (r.str === 'HL') {
+                            let lbits = Assembler.z80R8bits(l.str)
+                            outp.bytes = [ 0b01000110 | lbits<<3 ]
+                        }
+                        else if (r.str === 'BC') {
+                            if (l.str === 'A') { outp.bytes = [ 0x0A ] }
+                            else { this.error(outp, '(BC) can only be loaded into A') }
+                        }
+                        else if (r.str === 'DE') {
+                            if (l.str === 'A') { outp.bytes = [ 0x1A ] }
+                            else { this.error(outp, '(DE) can only be loaded into A') }
+                        }
+                        else {
+                            this.error(outp, `Invalid indirect load: LD ${l.str},(${r.str})`)
+                        }
+                        break
+                    case SyntaxItemKind.Z80IndIdx:
+                        // LD r,(IX|IY+d)
+                        {
+                            const lbits = Assembler.z80R8bits(l.str)
+                            outp.bytes = [ r.prefix, 0b01000110 | lbits<<3, r.num ]
+                        }
+                        break
+                    case SyntaxItemKind.Z80IndImm:
                         // LD A,(nn)
-                        item.bytes = [ 0x3D, src.lo, src.hi ];
+                        if (l.str === 'A') { outp.bytes = [ 0x3A, r.lo, r.hi ] }
+                        else { this.error(outp, '(nn) can only be loaded into A') }
+                        break
+                    default:
+                        this.error(outp, `invalid LD src: ${r.str}`)
+                        break
+                }
+                break
+            case SyntaxItemKind.Z80RI:
+                // LD I,A
+                if (r.str === 'A') { outp.bytes = [ 0xED, 0x47 ] }
+                else { this.error(outp, "can only load A into I") }
+                break
+            case SyntaxItemKind.Z80RR:
+                // LD R,A
+                if (r.str === 'A') { outp.bytes = [ 0xED, 0x4F ] }
+                else { this.error(outp, "can only A into R") }
+                break
+            case SyntaxItemKind.Z80R16:
+                // LD HL/BC/DE/SP/IX/IY,...
+                switch (l.str) {
+                    case 'HL': case 'IX': case 'IY':
+                        // LD HL/IX/IY,nn or LD HL/IX/IY,(nn)
+                        if (r.kind === SyntaxItemKind.Number) {
+                            if ((l.str === 'IX') || (l.str === 'IY')) {
+                                outp.bytes = [ l.prefix, 0x21, r.lo, r.hi ]
+                            }
+                            else {
+                                outp.bytes = [ 0x21, r.lo, r.hi ]
+                            }
+                        }
+                        else if (r.kind === SyntaxItemKind.Z80IndImm) {
+                            if ((l.str === 'IX') || (l.str == 'IY')) {
+                                outp.bytes = [ l.prefix, 0x2A, r.lo, r.hi ]
+                            }
+                            else {
+                                outp.bytes = [ 0x2A, r.lo, r.hi ]
+                            }
+                        }
+                        else {
+                            this.error(outp, `invalid src in LD ${l.str},${r.str}`)
+                        }
+                        break
+                    case 'BC': case 'DE': case 'SP':
+                        // LD BC/DE/SP,nn or LD BC/DE/SP,(nn), LD SP,HL/IX/IY
+                        if (r.kind === SyntaxItemKind.Number) {
+                            let lbits = Assembler.z80R16bits(l.str)
+                            outp.bytes = [ 0b00000001 | lbits<<4, r.lo, r.hi ]
+                        }
+                        else if (r.kind == SyntaxItemKind.Z80IndImm) {
+                            let lbits = Assembler.z80R16bits(l.str)
+                            outp.bytes = [ 0xED, 0b01001011 | lbits<<4, r.lo, r.hi ]
+                        }
+                        else if (r.kind === SyntaxItemKind.Z80R16) {
+                            // LD SP,HL/IX/IY
+                            if (l.str === 'SP') {
+                                if (r.str === 'HL') {
+                                    outp.bytes = [ 0xF9 ]
+                                }
+                                else if ((r.str === 'IX') || (r.str === 'IY')) {
+                                    outp.bytes = [ r.prefix, 0xF9 ]
+                                }
+                                else {
+                                    this.error(outp, `invalid src in LD ${l.str},${r.str}`)
+                                }
+                            }
+                            else {
+                                this.error(outp, `invalid dst in LD ${l.str},${r.str}`)
+                            }
+                        }
+                        else {
+                            this.error(outp, `invalid src in LD ${l.str},${r.str}`)
+                        }
+                        break
+                    default:
+                        this.error(outp, `invalid dst in LD ${l.str},...`)
+                        break
+                }
+                break
+            case SyntaxItemKind.Z80IndR16:
+                // LD (HL/BC/DE),...
+                if (l.str === 'HL') {
+                    // LD (HL),r or LD (HL),n
+                    if (r.kind === SyntaxItemKind.Number) {
+                        if (this.expect_8bit(outp, r.num)) {
+                            outp.bytes = [ 0x36, r.num ]
+                        }
+                    }
+                    else if (r.kind === SyntaxItemKind.Z80R8) {
+                        let rbits = Assembler.z80R8bits(r.str)
+                        outp.bytes = [ 0b01110000 | rbits ]
                     }
                     else {
-                        this.error(item, "expected (BC), (DE) or (nn)");
+                        this.error(outp, `invalid src in LD (HL),${r.str}`)
+                    }
+                }
+                else if ((l.str === 'BC') || (l.str === 'DE')) {
+                    if ((r.kind === SyntaxItemKind.Z80R8) && (r.str === 'A')) {
+                        outp.bytes = [ l.str === 'BC' ? 0x02:0x12 ]
+                    }
+                    else {
+                        this.error(outp, `can only load A into (${l.str})`)
                     }
                 }
                 else {
-                    this.error(item, "expected A..L, (HL), (IX+d), (IY+d) or byte value");
+                    this.error(outp, `invalid dst in LD (${l.str}),${r.str}`)
                 }
-            }
-            else if (dst.kind == ArgKind.iHL) {
-                if (src.kind == ArgKind.R8) {
-                    // LD (HL),r
-                    item.bytes = [ 0b01110000 | src.val ]
-                }
-                else if (src.kind == ArgKind.Imm) {
-                    // LD (HL),n
-                    if (this.expect_byte_val(src.val, item)) {
-                        item.bytes = [ 0x36, src.val ];
+                break
+            case SyntaxItemKind.Z80IndIdx:
+                // LD (IX/IY+d),r or LD (IX/IY+d),n
+                if (r.kind === SyntaxItemKind.Number) {
+                    if (this.expect_8bit(outp, r.num)) {
+                        outp.bytes = [ l.prefix, 0x36, l.num, r.num ]
                     }
                 }
-                else {
-                    this.error(item, "expected A..L or byte value")
-                }
-            }
-            else if (dst.kind == ArgKind.iIXYd) {
-                if (src.kind == ArgKind.R8) {
-                    // LD (HL),r
-                    item.bytes = [ dst.prefix, 0b01110000 | src.val ];
-                }
-                else if (src.kind == ArgKind.Imm) {
-                    // LD (HL),n
-                    if (this.expect_byte_val(src.val, item)) {
-                        item.bytes = [ dst.prefix, 0x36, dst.val, src.val ];
-                    }
+                else if (r.kind === SyntaxItemKind.Z80R8) {
+                    let rbits = Assembler.z80R8bits(r.str)
+                    outp.bytes = [ l.prefix, 0b01110000 | rbits, l.num ]
                 }
                 else {
-                    this.error(item, "expected A..L or byte value")
+                    this.error(outp, `invalid src in LD (${l.str}+d),${r.str}`)
                 }
-            }
-            else if (dst.kind == ArgKind.inn) {
+                break
+            case SyntaxItemKind.Z80IndImm:
                 // LD (nn),...
-                if (src.name = 'A') {
+                if ((r.kind === SyntaxItemKind.Z80R8) && (r.str === 'A')) {
                     // LD (nn),A
-                    item.bytes = [ 0x32, src.lo, src.hi];
+                    outp.bytes = [ 0x32, l.lo, l.hi ]
                 }
-                else if (src.name == 'HL') {
-                    // LD (nn),HL
-                    item.bytes = [ 0x22, src.lo, src.hi ];
+                else if (r.kind === SyntaxItemKind.Z80R16) {
+                    switch (r.str) {
+                        case 'HL':
+                            outp.bytes = [ 0x22, l.lo, l.hi ]
+                            break
+                        case 'IX': case 'IY':
+                            outp.bytes = [ r.prefix, 0x22, l.lo, l.hi ]
+                            break
+                        case 'BC': case 'DE': case 'SP':
+                            { 
+                                let rbits = Assembler.z80R16bits(r.str)
+                                outp.bytes = [ 0xED, 0b01000011 | rbits<<4, l.lo, l.hi ]
+                            }
+                            break
+                        default:
+                            this.error(outp, `invalid src in LD (nn),${r.str}`)
+                    }
                 }
-                else if (src.name == 'BC') {
-                    // LD (nn),BC
-                    item.bytes = [ 0xED, 0x43, src.lo, src.hi ];
-                }
-                else if (src.name == 'DE') {
-                    // LD (nn),DE
-                    item.bytes = [ 0xED, 0x53, src.lo, src.hi ];
-                }
-                else if (src.name == 'SP') {
-                    // LD (nn),SP
-                    item.bytes = [ 0xED, 0x73, src.lo, src.hi ];
-                }
-                else if (src.name == 'IX') {
-                    // LD (nn),IX
-                    item.bytes = [ 0xDD, 0x22, src.lo, src.hi ];
-                }
-                else if (src.name == 'IY') {
-                    // LD (nn),IY
-                    item.bytes = [ 0xFD, 0x22, src.lo, src.hi ];
-                }
-                else {
-                    this.error(item, "expected A, HL, BC, DE, SP, IX or IY");
-                }
-            }
-            else {
-                this.error(item, "FIXME: more LD ops")
-            }
+                break
+            default:
+                this.error(outp, `invalid LD dst: ${l.str}`)
+                break
         }
     }
-    */
+
+    private peek_item(): SyntaxItem {
+        let item = this.syntaxItems[this.syntaxItemIndex]
+        if (item === undefined) {
+            item = new SyntaxItem()
+            item.kind = SyntaxItemKind.EOF
+        }
+        return item
+    }
+
+    private skip_item() {
+        this.syntaxItemIndex++
+    }
+
+    private next_item(): SyntaxItem {
+        let item = this.peek_item()
+        this.skip_item()
+        return item
+    }
+
+    private expect_8bit(outp: ByteRange, val: number): boolean {
+        if (is_8bit(val)) { return true }
+        else { this.error(outp, "8-bit overflow")}
+    }
+
+    private error(outp: ByteRange, msg: string) {
+        outp.discard = true
+        this.errors.push(new Error(msg, outp.line))
+    }
+
 }
 
 export class HCAsm {
     static hello() {
-        console.log("Hello HCAsm");
+        console.log("Hello HCAsm")
     }
 }

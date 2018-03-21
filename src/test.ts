@@ -1,10 +1,10 @@
-import { Tokenizer, Parser } from "./hcasm";
+import { Tokenizer, Parser, Assembler } from "./hcasm";
 
-function hex8(byte: number) {
+function hex8(byte: number): string {
     return ('00' + byte.toString(16)).slice(-2).toUpperCase();
 }
 
-function hex16(byte: number) {
+function hex16(byte: number): string {
     return ('0000' + byte.toString(16)).slice(-4).toUpperCase();
 }
 
@@ -44,12 +44,23 @@ for (let t of tokens) {
     console.log(t.ToString());
 }
 let parser = new Parser();
-parser.Parse(tokens);
+let syntaxItems = parser.Parse(tokens);
 if (parser.HasErrors()) {
     parser.PrintErrors();
 }
 else {
-    for (let item of parser.items) {
-        console.log(item.ToString());
+    let asm = new Assembler();
+    let byteRanges = asm.Assemble(syntaxItems);
+    if (asm.HasErrors()) {
+        asm.PrintErrors(); 
+    }
+    else {
+        for (let rng of byteRanges) {
+            let str = `${hex16(rng.addr)}: `;
+            for (let byte of rng.bytes) {
+                str += `${hex8(byte)} `;
+            }
+            console.log(str);
+        }
     }
 }
