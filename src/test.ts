@@ -14,7 +14,7 @@ for (let t of tokens) {
 }
 
 tokens = Tokenizer.Tokenize(`
-        .org $200
+        org $200
 hello:  di
         ld a,b
         ld b,c
@@ -48,6 +48,7 @@ parser.Parse(tokens);
 if (parser.HasErrors()) {
     parser.PrintErrors();
 }
+/*
 else {
     for (let item of parser.items) {
         let str = `${hex16(item.addr)}: `;
@@ -57,3 +58,4 @@ else {
         console.log(str);
     }
 }
+*/

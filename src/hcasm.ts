@@ -6,18 +6,16 @@ function fatal_if(c: boolean, msg: string) {
 export enum TokenKind {
     Invalid,
     Unknown,
-    Control,                // .org, ...
     Name,                   // any string
     Number,                 // a number ($ prefix for hex, % prefix for binary)
     String,                 // a string literal (everything between "")
-    Label,                  // xxx:
     Comma,                  // ','
+    Colon,                  // ':'
     Plus,                   // '+'
     Pound,                  // '#'
     LeftBracket,            // '('
     RightBracket,           // ')'
-    Comment,                // ';' to end of line
-    End,                    // end statement
+    Separator,              // statement separator (newline)
     EOF,                    // end-of-stream
 };
 
@@ -25,18 +23,16 @@ export function TokenKindToString(kind: TokenKind): string {
     switch (kind) {
         case TokenKind.Invalid:         return "Invalid";
         case TokenKind.Unknown:         return "Unknown";
-        case TokenKind.Control:         return "Control";
         case TokenKind.Name:            return "Name";
         case TokenKind.Number:          return "Number";
         case TokenKind.String:          return "String";
-        case TokenKind.Label:           return "Label";
         case TokenKind.Comma:           return "Comma";
+        case TokenKind.Colon:           return "Colon";
         case TokenKind.Plus:            return "Plus";
         case TokenKind.Pound:           return "Pound";
         case TokenKind.LeftBracket:     return "LeftBracket";
         case TokenKind.RightBracket:    return "RightBracket";
-        case TokenKind.Comment:         return "Comment";
-        case TokenKind.End:             return "End";
+        case TokenKind.Separator:       return "Separator";
         case TokenKind.EOF:             return "EOF";
     }
 }
@@ -44,7 +40,7 @@ export function TokenKindToString(kind: TokenKind): string {
 export class Token {
     kind: TokenKind = TokenKind.Invalid;
     str: string = null;
-    val: number = 0;
+    num: number = 0;
     lineNr: number = 0;
 
     /** return a new tag-token */
@@ -80,8 +76,8 @@ export class Token {
         token.kind = TokenKind.Number;
         token.str = src.slice(start, end).toUpperCase();
         token.lineNr = lineNr;
-        token.val = parseInt(token.str, 10);
-        fatal_if(isNaN(token.val), `internal error: failed to parse ${token.str} as integer`);
+        token.num = parseInt(token.str, 10);
+        fatal_if(isNaN(token.num), `internal error: failed to parse ${token.str} as integer`);
         return token;
     }
 
@@ -91,8 +87,8 @@ export class Token {
         token.kind = TokenKind.Number;
         token.str = src.slice(start, end).toUpperCase();
         token.lineNr = lineNr;
-        token.val = parseInt(token.str, 16);
-        fatal_if(isNaN(token.val), `internal error: failed to parse ${token.str} as hex`);
+        token.num = parseInt(token.str, 16);
+        fatal_if(isNaN(token.num), `internal error: failed to parse ${token.str} as hex`);
         return token;
     }
 
@@ -102,15 +98,15 @@ export class Token {
         token.kind = TokenKind.Number;
         token.str = src.slice(start, end).toUpperCase();
         token.lineNr = lineNr;
-        token.val = parseInt(token.str, 2);
-        fatal_if(isNaN(token.val), `internal error: failed to parse ${token.str} as binary`);
+        token.num = parseInt(token.str, 2);
+        fatal_if(isNaN(token.num), `internal error: failed to parse ${token.str} as binary`);
         return token;
     }
 
     /** return a human-readable string with the token state (for debugging) */
     ToString(): string {
-        if (TokenKind.Number == this.kind) {
-            return `${this.lineNr}: ${ TokenKindToString(this.kind) } ${ this.val}`
+        if (TokenKind.Number === this.kind) {
+            return `${this.lineNr}: ${ TokenKindToString(this.kind) } ${ this.num}`
         }
         else if (this.str) {
             return `${this.lineNr}: ${ TokenKindToString(this.kind) } ${ this.str }`
@@ -119,30 +115,6 @@ export class Token {
             return `${this.lineNr}: ${ TokenKindToString(this.kind) }`
         }
     }
-}
-
-function isDecDigit(c: string): boolean {
-    return c >= '0' && c <= '9';
-}
-
-function isHexDigit(c: string): boolean {
-    return isDecDigit(c) || (c>='A' && c<='F') || (c>='a' && c<='f');
-}
-
-function isBinDigit(c: string): boolean {
-    return (c == '0') || (c == '1');
-}
-
-function isAlnum(c: string): boolean {
-    return (c>='0' && c<='9') || (c>='A' && c<='Z') || (c>='a' && c<='z');
-}
-
-function isLineEnd(c: string): boolean {
-    return (c == '\n') || (c == '\r') || (c == undefined);
-}
-
-function isWhiteSpace(c: string): boolean {
-    return (c == ' ') || (c == '\t') || (c == '\r');
 }
 
 /**
@@ -171,6 +143,39 @@ export class Tokenizer {
         return tokens;
     }
 
+    /** return true if character is a decimal digit */
+    private static isDecDigit(c: string): boolean {
+        return c >= '0' && c <= '9';
+    }
+
+    /** return true if character is a hex digit */
+    private static isHexDigit(c: string): boolean {
+        return Tokenizer.isDecDigit(c) || (c>='A' && c<='F') || (c>='a' && c<='f');
+    }
+
+    /** return true if character is a binary digit */
+    private static isBinDigit(c: string): boolean {
+        return (c === '0') || (c === '1');
+    }
+
+    /** return true if character is an alphanumeric character */
+    private static isAlnum(c: string): boolean {
+        return (c >= '0' && c <= '9') || 
+               (c >= 'A' && c <= 'Z') || 
+               (c >= 'a' && c <= 'z') ||
+               (c === '_');
+    }
+
+    /** return true if character is any line-end char */
+    private static isLineEnd(c: string): boolean {
+        return (c === '\n') || (c === '\r') || (c === undefined);
+    }
+
+    /** return true if character is whitespace */
+    private static isWhiteSpace(c: string): boolean {
+        return (c === ' ') || (c === '\t') || (c === '\r');
+    }
+
     /** return current character in input stream */
     private cur_char(): string {
         return this.src[this.pos];
@@ -195,91 +200,86 @@ export class Tokenizer {
         while (true) {
             this.start = this.end = this.pos;
             let c = this.cur_char();
-            if (c == undefined) {
+            if (c === undefined) {
                 return null;
             }
-            if (c == '$') {
+            if (c === '$') {
                 this.advance_skip();
-                while (isHexDigit(this.cur_char())) {
+                while (Tokenizer.isHexDigit(this.cur_char())) {
                     this.advance_take();
                 }
                 return Token.Hex(this.src, this.start, this.end, this.lineNr);
             }
-            else if (c == '%') {
+            else if (c === '%') {
                 this.advance_skip();
-                while (isBinDigit(this.cur_char())) {
+                while (Tokenizer.isBinDigit(this.cur_char())) {
                     this.advance_take();
                 }
                 return Token.Binary(this.src, this.start, this.end, this.lineNr);
             }
-            else if (isDecDigit(c)) { // a decimal number
-                while (isDecDigit(this.cur_char())) {
+            else if (Tokenizer.isDecDigit(c)) { // a decimal number
+                while (Tokenizer.isDecDigit(this.cur_char())) {
                     this.advance_take();
                 }
                 return Token.Decimal(this.src, this.start, this.end, this.lineNr);
             }
-            else if (c == '\"') {
+            else if (c === '\"') {
                 this.advance_skip();
                 while (this.cur_char() && (this.cur_char() != '\"')) {
                     this.advance_take();
                     // skip escape sequences
-                    if (this.cur_char() == '\\') {
+                    if (this.cur_char() === '\\') {
                         this.advance_take();
                     }
                 }
                 this.advance_ignore();
                 return Token.String(this.src, this.start, this.end, this.lineNr);
             }
-            else if (c == ',') {
+            else if (c === ',') {
                 this.advance_ignore();
                 return Token.Tag(TokenKind.Comma, this.lineNr);
             }
-            else if (c == '+') {
+            else if (c === '+') {
                 this.advance_ignore();
                 return Token.Tag(TokenKind.Plus, this.lineNr);
             }
-            else if (c == '#') {
+            else if (c === '#') {
                 this.advance_ignore();
                 return Token.Tag(TokenKind.Pound, this.lineNr);
             }
-            else if (c == '(') {
+            else if (c == ':') {
+                this.advance_ignore();
+                return Token.Tag(TokenKind.Colon, this.lineNr);
+            }
+            else if (c === '(') {
                 this.advance_ignore();
                 return Token.Tag(TokenKind.LeftBracket, this.lineNr);
             }
-            else if (c == ')') {
+            else if (c === ')') {
                 this.advance_ignore();
                 return Token.Tag(TokenKind.RightBracket, this.lineNr);
             }
-            else if (c == '.') {
-                this.advance_skip();
-                while (isAlnum(this.cur_char())) {
+            else if (Tokenizer.isAlnum(c)) {
+                while (Tokenizer.isAlnum(this.cur_char())) {
                     this.advance_take();
                 }
-                return Token.Name(TokenKind.Control, this.src, this.start, this.end, this.lineNr);
+                return Token.Name(TokenKind.Name, this.src, this.start, this.end, this.lineNr);
             }
-            else if (c == ';') {
-                while (!isLineEnd(this.cur_char())) {
-                    this.advance_take();
-                }
-                return Token.Name(TokenKind.Comment, this.src, this.start, this.end, this.lineNr);
-            }
-            else if (isAlnum(c)) {
-                while (isAlnum(this.cur_char())) {
-                    this.advance_take();
-                }
-                let kind = TokenKind.Name;
-                if (this.cur_char() == ':') {
-                    this.advance_ignore();
-                    kind = TokenKind.Label;
-                }
-                return Token.Name(kind, this.src, this.start, this.end, this.lineNr);
-            }
-            else if (c == '\n') {
+            else if (c === '\n') {
                 this.lineNr++;
                 this.advance_ignore();
+                return Token.Tag(TokenKind.Separator, this.lineNr);
             }
-            else if (isWhiteSpace(c)) {
+            else if (Tokenizer.isWhiteSpace(c)) {
                 this.advance_ignore();
+            }
+            else if (c === ';') {
+                // a comment, skip to line end, and produce a separator token
+                while (this.cur_char() != '\n') {
+                    this.advance_ignore();
+                }
+                this.lineNr++;
+                return Token.Tag(TokenKind.Separator, this.lineNr);
             }
             else {
                 // invalid character encountered
@@ -290,47 +290,172 @@ export class Tokenizer {
     }
 }
 
-/** intermediate 'items', produced by Itemizer from token stream */
-enum ItemKind {
-    ORG,
-    Z80,
-    M6520,
-    OP,         // LD, ADD, ...
-    R8,         // B, C, D, E, H, L, A
-    I,          // I register
-    R,          // R regiser
-    BC,
-    DE,
-    HL,
-    SP,
-    AF,
-    IX,
-    IY,
-    Imm8,       // 8-bit immediate value
-    Imm16,      // 16-bit immediate value
-    iHL,        // (HL)
-    iBC,        // (BC)
-    iDE,        // (DE)
-    inn,        // (nn)
-    iIXd,       // (IX+d)
-    iIYd,       // (IY+d)
+/** tokens parsed into abstract syntax items by the parser */
+enum SyntaxItemKind {
+    Invalid,
+    // misc
+    Comma, Name, String, Number,
+    // meta items
+    Org, Z80, M6502, Include, Incbin, DefByte, DefWord, 
+    Const, Macro, EndMacro, End, Label,
+    // CPU instructions
+    ADC, ADD, AND, BIT, 
+    CALL, CALLNZ, CALLZ, CALLNC, CALLC, CALLPO, CALLPE, CALLP, CALLM,
+    CCF, CP, CPD, CPDR, CPI, CPIR, CPL, DAA, DEC, DI, 
+    DJNZ, EI, EX, EXX, HALT, IM0, IM1, IM2, INC, IND, INDR, INI, INIR, 
+    JP, JPNZ, JPZ, JPNC, JPC, JPPO, JPPE, JPP, JPM, JR, JRNC, JRC, JRNZ, JRZ,
+    LD, LDD, LDDR, LDI, LDIR, NEG, NOP, OR, OTDR, OTIR, OUT, OUTD, OUTI, POP,
+    PUSH, RES, RET, RETNZ, RETZ, RETNC, RETC, RETPO, RETPE, RETP, RETM,
+    RL, RLA, RLC, RLD, RR, RRA, RRC, RRCA, RRD, RST, SBC, SCF, SET, SLA, SRA,
+    SRL, SUB, XOR,
+    // registers
+    B, C, D, E, H, L, A, F, I, R,
+    BC, DE, HL, AF, IX, IY, 
+    AF_,    // AF' (for EX AF,AF')
+    // operands
+    iHL,    // (HL)
+    iBC,    // (BC)
+    iDE,    // (DE)
+    iSP,    // (SP)
+    iIX,    // (IX) (for JP (IX))
+    iIY,    // (IY) (for JP (IY))
+    iIXd,   // (IX+d)
+    iIYd,   // (IY+d)
+    iC,     // (C)
+    iImm,   // (nn) or (n) indirect (16- or 8-bit must be checked by assembler)
 };
 
-enum CPU {
-    Z80,
-    M6502,
-}
+let SyntaxNameMap: {[key:string]: SyntaxItemKind } = {
+    'ORG':      SyntaxItemKind.Org, 
+    'Z80':      SyntaxItemKind.Z80, 
+    'M6502':    SyntaxItemKind.M6502, 
+    'INCLUDE':  SyntaxItemKind.Include,
+    'INCBIN':   SyntaxItemKind.Incbin,
+    'DB':       SyntaxItemKind.DefByte,
+    'DW':       SyntaxItemKind.DefWord, 
+    'CONST':    SyntaxItemKind.Const,
+    'MACRO':    SyntaxItemKind.Macro,
+    'ENDM':     SyntaxItemKind.EndMacro,
+    'END':      SyntaxItemKind.End,
+    'ADC':      SyntaxItemKind.ADC,
+    'ADD':      SyntaxItemKind.ADD,
+    'AND':      SyntaxItemKind.AND,
+    'BIT':      SyntaxItemKind.BIT,
+    'CALL':     SyntaxItemKind.CALL,
+    'CALLNZ':   SyntaxItemKind.CALLNZ,
+    'CALLZ':    SyntaxItemKind.CALLZ,
+    'CALLNC':   SyntaxItemKind.CALLNC,
+    'CALLC':    SyntaxItemKind.CALLC,
+    'CALLPO':   SyntaxItemKind.CALLPO,
+    'CALLPE':   SyntaxItemKind.CALLPE,
+    'CALLP':    SyntaxItemKind.CALLP,
+    'CALLM':    SyntaxItemKind.CALLM,
+    'CCF':      SyntaxItemKind.CCF,
+    'CP':       SyntaxItemKind.CP,
+    'CPD':      SyntaxItemKind.CPD,
+    'CPDR':     SyntaxItemKind.CPDR,
+    'CPI':      SyntaxItemKind.CPI,
+    'CPIR':     SyntaxItemKind.CPIR,
+    'CPL':      SyntaxItemKind.CPL,
+    'DAA':      SyntaxItemKind.DAA,
+    'DEC':      SyntaxItemKind.DEC,
+    'DI':       SyntaxItemKind.DI, 
+    'DJNZ':     SyntaxItemKind.DJNZ,
+    'EI':       SyntaxItemKind.EI,
+    'EX':       SyntaxItemKind.EX,
+    'EXX':      SyntaxItemKind.EXX, 
+    'HALT':     SyntaxItemKind.HALT,
+    'IM0':      SyntaxItemKind.IM0,
+    'IM1':      SyntaxItemKind.IM1, 
+    'IM2':      SyntaxItemKind.IM2,
+    'INC':      SyntaxItemKind.INC,
+    'IND':      SyntaxItemKind.IND,
+    'INDR':     SyntaxItemKind.INDR,
+    'INI':      SyntaxItemKind.INI,
+    'INIR':     SyntaxItemKind.INIR,
+    'JP':       SyntaxItemKind.JP,
+    'JPNZ':     SyntaxItemKind.JPNZ,
+    'JPZ':      SyntaxItemKind.JPZ,
+    'JPNC':     SyntaxItemKind.JPNC,
+    'JPC':      SyntaxItemKind.JPC,
+    'JPPO':     SyntaxItemKind.JPPO,
+    'JPPE':     SyntaxItemKind.JPPE,
+    'JPP':      SyntaxItemKind.JPP,
+    'JPM':      SyntaxItemKind.JPM,
+    'JR':       SyntaxItemKind.JR,
+    'JRNC':     SyntaxItemKind.JRNC,
+    'JRC':      SyntaxItemKind.JRC,
+    'JRNZ':     SyntaxItemKind.JRNZ,
+    'JRZ':      SyntaxItemKind.JRZ,
+    'LD':       SyntaxItemKind.LD,
+    'LDD':      SyntaxItemKind.LDD,
+    'LDDR':     SyntaxItemKind.LDDR,
+    'LDI':      SyntaxItemKind.LDI,
+    'LDIR':     SyntaxItemKind.LDIR,
+    'NEG':      SyntaxItemKind.NEG,
+    'NOP':      SyntaxItemKind.NOP,
+    'OR':       SyntaxItemKind.OR,
+    'OTDR':     SyntaxItemKind.OTDR,
+    'OTIR':     SyntaxItemKind.OTIR,
+    'OUT':      SyntaxItemKind.OUT,
+    'OUTD':     SyntaxItemKind.OUTD,
+    'OUTI':     SyntaxItemKind.OUTI,
+    'POP':      SyntaxItemKind.POP,
+    'PUSH':     SyntaxItemKind.PUSH,
+    'RES':      SyntaxItemKind.RES,
+    'RET':      SyntaxItemKind.RET,
+    'RETNZ':    SyntaxItemKind.RETNZ,
+    'RETZ':     SyntaxItemKind.RETZ,
+    'RETNC':    SyntaxItemKind.RETNC,
+    'RETC':     SyntaxItemKind.RETC,
+    'RETPO':    SyntaxItemKind.RETPO,
+    'RETPE':    SyntaxItemKind.RETPE,
+    'RETP':     SyntaxItemKind.RETP,
+    'RETM':     SyntaxItemKind.RETM,
+    'RL':       SyntaxItemKind.RL,
+    'RLA':      SyntaxItemKind.RLA,
+    'RLC':      SyntaxItemKind.RLC,
+    'RLD':      SyntaxItemKind.RLD,
+    'RR':       SyntaxItemKind.RR,
+    'RRA':      SyntaxItemKind.RRA,
+    'RRC':      SyntaxItemKind.RRC,
+    'RRCA':     SyntaxItemKind.RRCA,
+    'RRD':      SyntaxItemKind.RRD,
+    'RST':      SyntaxItemKind.RST,
+    'SBC':      SyntaxItemKind.SBC,
+    'SCF':      SyntaxItemKind.SCF,
+    'SET':      SyntaxItemKind.SET,
+    'SLA':      SyntaxItemKind.SLA,
+    'SRA':      SyntaxItemKind.SRA,
+    'SRL':      SyntaxItemKind.SRL,
+    'SUB':      SyntaxItemKind.SUB,
+    'XOR':      SyntaxItemKind.XOR,
+    'B':        SyntaxItemKind.B,
+    'C':        SyntaxItemKind.C,
+    'D':        SyntaxItemKind.D,
+    'E':        SyntaxItemKind.H,
+    'L':        SyntaxItemKind.L,
+    'A':        SyntaxItemKind.A,
+    'F':        SyntaxItemKind.F,
+    'I':        SyntaxItemKind.I,
+    'R':        SyntaxItemKind.R,
+    'BC':       SyntaxItemKind.BC,
+    'DE':       SyntaxItemKind.DE,
+    'HL':       SyntaxItemKind.HL,
+    'AF':       SyntaxItemKind.AF,
+    'IX':       SyntaxItemKind.IX,
+    'IY':       SyntaxItemKind.IY,
+    "AF'":      SyntaxItemKind.AF_,
+};
 
-/**
- * A span is what the parser produces, basically a range of bytes
- * (CPU instructions or raw byte sequences).
- */
-export class Span {
-    valid: boolean = false;
-    addr: number = 0;           // 16-bit address
-    label: string;              // optional label name
-    bytes: Array<number>;       // the actual bytes (filled in later) 
-
+class SyntaxItem {
+    kind:   SyntaxItemKind = SyntaxItemKind.Invalid;
+    str: string = null;
+    num: number = 0;
+    lo:  number = 0;
+    hi:  number = 0;
+    line: number = 0;
+    valid: boolean = true;
 }
 
 export class Error {
@@ -342,123 +467,145 @@ export class Error {
     }
 }
 
-enum ArgKind {
-    Invalid = 0,
-    R8,     // A,B,C,D,E,H,L
-    R16,    // BC, DE, HL, AF, SP, IX, IY
-    iHL,    // (HL)
-    iBC,    // (BC)
-    iDE,    // (DE)
-    iIXYd,  // (IX+d) or (IY+d)
-    inn,    // (nn)
-    Imm,    // Immediate 8-bit or 16-bit value
-    I,      // I register
-    R,      // R register
-}
-
-class Arg {
-    kind: ArgKind = ArgKind.Invalid;
-    name: string = null;
-    val:  number = 0;
-    lo:   number = 0;
-    hi:   number = 0;
-    prefix: number = 0;
-}
-
 /**
  * The Parser takes an array of tokens as input and produces 
- * an array of Span items.
+ * an array of SyntaxItems
  */
 export class Parser {
     addr: number = 0;
-    cpu: CPU = CPU.Z80;
     tokens: Array<Token>;
     index: number = 0;
-    items: Array<Span> = new Array<Span>();
+    items: Array<SyntaxItem>;
     errors: Array<Error> = new Array<Error>();
-    private _token: Token;
 
-    // see https://github.com/Microsoft/TypeScript/issues/9998
-    token(): Token {
-        return this._token;
+    private peek_token(): Token {
+        let token = this.tokens[this.index];
+        if (token === undefined) {
+            token = new Token();
+            token.kind = TokenKind.EOF;
+        }
+        return token;
     }
 
-    next_token() {
-        this._token = this.tokens[this.index++];
-        if (this._token == undefined) {
-            this._token = new Token();
-            this._token.kind = TokenKind.EOF;
-        }
+    private skip_token() {
+        this.index++;
+    }
+
+    private next_token(): Token {
+        let token = this.peek_token();
+        this.skip_token();
+        return token;
+    }
+
+    private error(item: SyntaxItem, msg: string) {
+        item.valid = false;
+        this.errors.push(new Error(msg, item.line));
     }
 
     Parse(tokens: Array<Token>) {
         this.tokens = tokens;
         this.index = 0;
-        this.addr = 0;
-        this.cpu = CPU.Z80;
-        this.items = new Array<Span>();
+        this.items = new Array<SyntaxItem>();
         this.errors = new Array<Error>();
         let i = 0;
-        let item = new Span();
         while (true) {
-            this.next_token();
-            if (this.token().kind == TokenKind.EOF) {
+            let item = new SyntaxItem();
+            let token = this.next_token();
+            if (token.kind === TokenKind.EOF) {
                 break;
             }
-            switch (this.token().kind) {
-                case TokenKind.Control:
-                    switch (this.token().str) {
-                        case 'Z80':
-                            this.cpu = CPU.Z80;
-                            break;
-                        case 'M6502':
-                            this.cpu = CPU.M6502;
-                            break;
-                        case 'ORG':
-                            this.next_token();
-                            if (this.expect_word(item)) {
-                                this.addr = this.token().val;
+            item.line = token.lineNr;
+            if (token.kind === TokenKind.Comma) {
+                // comma separators are passed through
+                item.kind = SyntaxItemKind.Comma;
+            }
+            else if (token.kind === TokenKind.Number) {
+                item.kind = SyntaxItemKind.Number;
+                item.num = token.num;
+                item.lo  = token.num & 0xFF;
+                item.hi  = (token.num>>8) & 0xFF;
+            }
+            else if (token.kind === TokenKind.String) {
+                // pass through string literals
+                item.kind = SyntaxItemKind.String;
+                item.str = token.str;
+            }
+            else if (token.kind === TokenKind.Name) {
+                if (this.peek_token().kind === TokenKind.Colon) {
+                    this.skip_token();
+                    item.kind = SyntaxItemKind.Label;
+                    item.str = token.str;
+                }
+                else if (token.str in SyntaxNameMap) {
+                    item.kind = SyntaxNameMap[token.str];
+                    item.str = token.str;
+                }
+                else {
+                    item.kind = SyntaxItemKind.Name;
+                    item.str = token.str;
+                }
+            }
+            else if (token.kind === TokenKind.LeftBracket) {
+                token = this.next_token();
+                if (token.kind === TokenKind.Number) {
+                    item.kind = SyntaxItemKind.iImm;
+                    item.num = token.num;
+                    item.lo = token.num & 0xFF;
+                    item.hi = (token.num>>8) & 0xFF;
+                }
+                else if (token.kind === TokenKind.Name) {
+                    if (token.str === 'HL') {
+                        // (HL)
+                        item.kind = SyntaxItemKind.iHL;
+                    }
+                    else if (token.str === 'BC') {
+                        // (BC)
+                        item.kind = SyntaxItemKind.iBC;
+                    }
+                    else if (token.str === 'DE') {
+                        // (DE)
+                        item.kind = SyntaxItemKind.iDE;
+                    }
+                    else if (token.str === 'SP') {
+                        // (SP)
+                        item.kind = SyntaxItemKind.iSP;
+                    }
+                    else if (token.str === 'C') {
+                        // (C)
+                        item.kind = SyntaxItemKind.iC;
+                    }
+                    else if ((token.str === 'IX') || (token.str === 'IY')) {
+                        // (IX), (IY), (IX+d) or (IY+d)
+                        token = this.next_token();
+                        if (token.kind === TokenKind.Plus) {
+                            // (IX+d) or (IY+d)
+                            item.kind = token.str==='IX' ? SyntaxItemKind.iIXd:SyntaxItemKind.iIYd;
+                            token = this.next_token();
+                            if (token.kind === TokenKind.Number) {
+                                item.num = token.num;
+                                item.lo = token.num & 0xFF;
+                                item.hi = (token.num>>8) && 0xFF;
                             }
-                            break;
-                        case 'INCLUDE':
-                        case 'INCBIN':
-                        case 'BYTE':
-                        case 'WORD':
-                        case 'CONST':
-                        case 'MACRO':
-                        case 'ENDM':
-                        case 'END':
-                            // FIXME
-                            break;
-                        default:
-                            this.error(item, `unknown keyword: .${ this.token().str } `);
-                            break;
-                    }
-                    break;
-                case TokenKind.Label:
-                    if (this.expect_name(item)) {
-                        item.label = this.token().str;
-                    }
-                    break;
-                case TokenKind.Name:
-                    if (this.expect_name(item)) {
-                        if (this.cpu == CPU.Z80) {
-                            this.parse_z80_op(item)
+                            else {
+                                this.error(item, "expected offset in (IX+d) / (IY+d)")
+                            }
+                        }
+                        else {
+                            // (IX) or (IY)
+                            item.kind = token.str==='IX' ? SyntaxItemKind.iIX:SyntaxItemKind.iIY;
                         }
                     }
-                    break;
-                case TokenKind.Comment:
-                    // a comment, ignore...
-                    break;
-                default:
-                    this.error(item, 'unexpected token')
-                    break;
+                    token = this.next_token();
+                    if (token.kind !== TokenKind.RightBracket) {
+                        this.error(item, "expected closing bracket");
+                    }
+                }
+            }
+            else {
+                this.error(item, `unhandled token: ${ TokenKindToString(token.kind )}`);
             }
             if (item.valid) {
-                item.addr = this.addr;
                 this.items.push(item);
-                this.addr += item.bytes.length;
-                item = new Span();
             }
         }
     }
@@ -473,10 +620,11 @@ export class Parser {
         }
     }
 
+    /*
     parse_z80_op(item: Span) {
         item.valid = true;
         switch (this.token().str) {
-            /* simple mnemonics without args */
+            // simple mnemonics without args 
             case 'NOP':     item.bytes = [ 0x00 ]; break;
             case 'EXX':     item.bytes = [ 0xD9 ]; break;
             case 'LDI':     item.bytes = [ 0xED, 0xA0 ]; break;
@@ -523,9 +671,6 @@ export class Parser {
             case 'OTIR':    item.bytes = [ 0xED, 0xB3 ]; break;
             case 'OUTD':    item.bytes = [ 0xED, 0xAB ]; break;
             case 'OTDR':    item.bytes = [ 0xED, 0xBB ]; break;
-
-            /* load instructions */
-            case 'LD':      this.parse_z80_ld(item); break;
             default:
                 this.error(item, `Invalid Z80 instruction: ${ this.token().str }`)
                 item.valid = false;
@@ -533,85 +678,6 @@ export class Parser {
         }
     }
     
-    parse_z80_arg(item: Span): Arg {
-        let arg = new Arg();
-        this.next_token();
-        if (this.test_reg8()) {
-            // 8-bit register
-            arg.kind = ArgKind.R8;
-            arg.name = this.token().str;
-            switch (this.token().str) {
-                case 'B':   arg.val = 0b000; break;
-                case 'C':   arg.val = 0b001; break;
-                case 'D':   arg.val = 0b010; break;
-                case 'E':   arg.val = 0b011; break;
-                case 'H':   arg.val = 0b100; break;
-                case 'L':   arg.val = 0b101; break;
-                case 'A':   arg.val = 0b111; break;
-                default: fatal_if(true, 'invalid 8-bit register name');
-            }
-        }
-        else if (this.test_reg16()) {
-            // 16-bit register
-            arg.kind = ArgKind.R16;
-            arg.name = this.token().str;
-        }
-        else if ((this.token().kind == TokenKind.Name) && (this.token().str == 'I')) {
-            arg.kind = ArgKind.I;
-        }
-        else if ((this.token().kind == TokenKind.Name) && (this.token().str == 'R')) {
-            arg.kind = ArgKind.R;
-        }
-        else if (this.token().kind == TokenKind.LeftBracket) {
-            this.next_token();
-            if (this.token().kind == TokenKind.Number) {
-                if (this.expect_word(item)) {
-                    arg.kind = ArgKind.inn;
-                    arg.val = this.token().val;
-                    arg.lo = arg.val & 0xFF;
-                    arg.hi = (arg.val>>8) & 0xFF;
-                }
-            }
-            else if (this.token().kind == TokenKind.Name) {
-                switch (this.token().str) {
-                    case 'HL':  
-                        arg.kind = ArgKind.iHL; break;
-                    case 'BC':  
-                        arg.kind = ArgKind.iBC; break;
-                    case 'DE':  
-                        arg.kind = ArgKind.iDE; break;
-                    case 'IX':
-                    case 'IY':
-                        arg.kind = ArgKind.iIXYd;
-                        arg.name = this.token().str;
-                        arg.prefix = arg.name == 'IX' ? 0xDD : 0xFD;
-                        this.next_token();
-                        if (this.expect_plus(item)) {
-                            this.next_token();
-                            if (this.expect_byte(item)) {
-                                arg.val = this.token().val;
-                            }
-                        }
-                        break;
-                    default:
-                        this.error(item, "expected (HL), (BC), (DE), (IX+d) or (IY+d)");
-                        break;
-                }
-            }
-            this.next_token();
-            if (TokenKind.RightBracket != this.token().kind) {
-                this.error(item, "expected ')'");
-            }
-        }
-        else if (this.token().kind == TokenKind.Number) {
-            arg.kind = ArgKind.Imm;
-            arg.val = this.token().val;
-            arg.lo = arg.val & 0xFF;
-            arg.hi = (arg.val >> 8) & 0xFF;
-        }
-        return arg;
-    }
-
     parse_z80_ld(item: Span) {
         let dst = this.parse_z80_arg(item);
         this.next_token();
@@ -735,106 +801,7 @@ export class Parser {
             }
         }
     }
-
-    test_reg8(): boolean {
-        if (this.token().kind != TokenKind.Name) {
-            return false;
-        }
-        switch (this.token().str) {
-            case 'A': case 'B': case 'C': case 'D': case 'E': case 'H': case 'L':
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    test_reg16(): boolean {
-        if (this.token().kind != TokenKind.Name) {
-            return false;
-        }
-        switch (this.token().str) {
-            case 'AF': case 'SP': case 'BC': case 'DE': case 'HL': case 'IX': case 'IY':
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    eof(item: Span): boolean {
-        if (this.token().kind == TokenKind.EOF) {
-            this.error(item, 'unexpected end of stream');
-            return true;
-        }
-        else {
-            return false;
-        }
-    }
-
-    expect_byte_val(val: number, item: Span): boolean {
-        if ((val < 0) || (val > 0xFF)) {
-            this.error(item, 'value out of range (expected 8-bit value)');
-            return false;
-        }
-        return true;
-    }
-
-    expect_comma(item: Span): boolean {
-        if (this.eof(item)) { return false; }
-        if (this.token().kind != TokenKind.Comma) {
-            this.error(item, 'comma expected');
-            return false;
-        }
-        return true;
-    }
-
-    expect_plus(item: Span): boolean {
-        if (this.eof(item)) { return false; }
-        if (this.token().kind != TokenKind.Plus) {
-            this.error(item, 'plus expected');
-            return false;
-        }
-        return true;
-    }
-
-    expect_byte(item: Span): boolean {
-        if (this.eof(item)) { return false; }
-        if (this.token().kind != TokenKind.Number) {
-            this.error(item, '8-bit value expected');
-            return false;
-        }
-        if ((this.token().val < 0) || (this.token().val > 0xFF)) {
-            this.error(item, 'value out of range (expected 8-bit value)');
-            return false;
-        }
-        return true;
-    }
-
-    expect_word(item: Span): boolean {
-        if (this.eof(item)) { return false; }
-        if (this.token().kind != TokenKind.Number) {
-            this.error(item, '16-bit value expected');
-            return false;
-        }
-        if ((this.token().val < 0) || (this.token().val > 0xFFFF)) {
-            this.error(item, 'value out of range (expected 16-bit value)');
-            return false;
-        }
-        return true;
-    }
-
-    expect_name(item: Span): boolean {
-        if (this.eof(item)) { return false; }
-        if ((this.token().str == undefined) || (this.token().str == '')) {
-            this.error(item, 'name expected');
-            return false;
-        }
-        return true;
-    }
-
-    error(item: Span, msg: string) {
-        item.valid = false;
-        this.errors.push(new Error(msg, this.token().lineNr));
-    }
+    */
 }
 
 export class HCAsm {
