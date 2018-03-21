@@ -15,7 +15,6 @@ export enum TokenKind {
     Pound,                  // '#'
     LeftBracket,            // '('
     RightBracket,           // ')'
-    Separator,              // statement separator (newline)
     EOF,                    // end-of-stream
 };
 
@@ -32,7 +31,6 @@ export function TokenKindToString(kind: TokenKind): string {
         case TokenKind.Pound:           return "Pound";
         case TokenKind.LeftBracket:     return "LeftBracket";
         case TokenKind.RightBracket:    return "RightBracket";
-        case TokenKind.Separator:       return "Separator";
         case TokenKind.EOF:             return "EOF";
     }
 }
@@ -266,20 +264,18 @@ export class Tokenizer {
                 return Token.Name(TokenKind.Name, this.src, this.start, this.end, this.lineNr);
             }
             else if (c === '\n') {
-                this.lineNr++;
                 this.advance_ignore();
-                return Token.Tag(TokenKind.Separator, this.lineNr);
+                this.lineNr++;
             }
             else if (Tokenizer.isWhiteSpace(c)) {
                 this.advance_ignore();
             }
             else if (c === ';') {
                 // a comment, skip to line end, and produce a separator token
-                while (this.cur_char() != '\n') {
+                this.advance_ignore();
+                while (Tokenizer.isWhiteSpace(this.cur_char())) {
                     this.advance_ignore();
                 }
-                this.lineNr++;
-                return Token.Tag(TokenKind.Separator, this.lineNr);
             }
             else {
                 // invalid character encountered
@@ -293,169 +289,179 @@ export class Tokenizer {
 /** tokens parsed into abstract syntax items by the parser */
 enum SyntaxItemKind {
     Invalid,
-    // misc
-    Comma, Name, String, Number,
-    // meta items
-    Org, Z80, M6502, Include, Incbin, DefByte, DefWord, 
-    Const, Macro, EndMacro, End, Label,
-    // CPU instructions
-    ADC, ADD, AND, BIT, 
-    CALL, CALLNZ, CALLZ, CALLNC, CALLC, CALLPO, CALLPE, CALLP, CALLM,
-    CCF, CP, CPD, CPDR, CPI, CPIR, CPL, DAA, DEC, DI, 
-    DJNZ, EI, EX, EXX, HALT, IM0, IM1, IM2, INC, IND, INDR, INI, INIR, 
-    JP, JPNZ, JPZ, JPNC, JPC, JPPO, JPPE, JPP, JPM, JR, JRNC, JRC, JRNZ, JRZ,
-    LD, LDD, LDDR, LDI, LDIR, NEG, NOP, OR, OTDR, OTIR, OUT, OUTD, OUTI, POP,
-    PUSH, RES, RET, RETNZ, RETZ, RETNC, RETC, RETPO, RETPE, RETP, RETM,
-    RL, RLA, RLC, RLD, RR, RRA, RRC, RRCA, RRD, RST, SBC, SCF, SET, SLA, SRA,
-    SRL, SUB, XOR,
-    // registers
-    B, C, D, E, H, L, A, F, I, R,
-    BC, DE, HL, AF, IX, IY, 
-    AF_,    // AF' (for EX AF,AF')
-    // operands
-    iHL,    // (HL)
-    iBC,    // (BC)
-    iDE,    // (DE)
-    iSP,    // (SP)
-    iIX,    // (IX) (for JP (IX))
-    iIY,    // (IY) (for JP (IY))
-    iIXd,   // (IX+d)
-    iIYd,   // (IY+d)
-    iC,     // (C)
-    iImm,   // (nn) or (n) indirect (16- or 8-bit must be checked by assembler)
+    Comma,      // pass-through from TokenKind
+    Name,       // pass-through from TokenKind
+    String,     // pass-through from TokenKind
+    Number,     // pass-through from TokenKind
+    Label,      // a label 
+    Keyword,    // org, z80, m6502, db, etc...
+    Z80Op,      // a Z80 instruction
+    Z80R8,      // a regular Z80 8-bit register (B,C,D,E,H,L,A)
+    Z80RI,      // the special I register
+    Z80RR,      // the special R register
+    Z80R16,     // a Z80 16-bit register
+    Z80IndR16,  // Z80 indirection through 16-bit register
+    Z80IndIdx,  // Z80 indexed-indirect (IX+d) or (IY+d)
+    Z80IndC,    // Z80 indirect (C)
+    Z80IndImm,  // Z80 indirect-immediate 
 };
 
+function SyntaxItemKindToString(kind: SyntaxItemKind): string {
+    switch (kind) {
+        case SyntaxItemKind.Invalid:    return "Invalid";
+        case SyntaxItemKind.Comma:      return "Comma";
+        case SyntaxItemKind.Name:       return "Name";
+        case SyntaxItemKind.String:     return "String";
+        case SyntaxItemKind.Number:     return "Number";
+        case SyntaxItemKind.Label:      return "Label";
+        case SyntaxItemKind.Keyword:    return "Keyword";
+        case SyntaxItemKind.Z80Op:      return "Z80Op";
+        case SyntaxItemKind.Z80R8:      return "Z80R8";
+        case SyntaxItemKind.Z80RI:      return "Z80RI";
+        case SyntaxItemKind.Z80RR:      return "Z80RR";
+        case SyntaxItemKind.Z80R16:     return "Z80R16";
+        case SyntaxItemKind.Z80IndR16:  return "Z80IndR16";
+        case SyntaxItemKind.Z80IndIdx:  return "Z80IndIdx";
+        case SyntaxItemKind.Z80IndC:    return "Z80IndC";
+        case SyntaxItemKind.Z80IndImm:  return "Z80IndImm";
+        default: return "UNKNOWN";
+    }
+}
+
 let SyntaxNameMap: {[key:string]: SyntaxItemKind } = {
-    'ORG':      SyntaxItemKind.Org, 
-    'Z80':      SyntaxItemKind.Z80, 
-    'M6502':    SyntaxItemKind.M6502, 
-    'INCLUDE':  SyntaxItemKind.Include,
-    'INCBIN':   SyntaxItemKind.Incbin,
-    'DB':       SyntaxItemKind.DefByte,
-    'DW':       SyntaxItemKind.DefWord, 
-    'CONST':    SyntaxItemKind.Const,
-    'MACRO':    SyntaxItemKind.Macro,
-    'ENDM':     SyntaxItemKind.EndMacro,
-    'END':      SyntaxItemKind.End,
-    'ADC':      SyntaxItemKind.ADC,
-    'ADD':      SyntaxItemKind.ADD,
-    'AND':      SyntaxItemKind.AND,
-    'BIT':      SyntaxItemKind.BIT,
-    'CALL':     SyntaxItemKind.CALL,
-    'CALLNZ':   SyntaxItemKind.CALLNZ,
-    'CALLZ':    SyntaxItemKind.CALLZ,
-    'CALLNC':   SyntaxItemKind.CALLNC,
-    'CALLC':    SyntaxItemKind.CALLC,
-    'CALLPO':   SyntaxItemKind.CALLPO,
-    'CALLPE':   SyntaxItemKind.CALLPE,
-    'CALLP':    SyntaxItemKind.CALLP,
-    'CALLM':    SyntaxItemKind.CALLM,
-    'CCF':      SyntaxItemKind.CCF,
-    'CP':       SyntaxItemKind.CP,
-    'CPD':      SyntaxItemKind.CPD,
-    'CPDR':     SyntaxItemKind.CPDR,
-    'CPI':      SyntaxItemKind.CPI,
-    'CPIR':     SyntaxItemKind.CPIR,
-    'CPL':      SyntaxItemKind.CPL,
-    'DAA':      SyntaxItemKind.DAA,
-    'DEC':      SyntaxItemKind.DEC,
-    'DI':       SyntaxItemKind.DI, 
-    'DJNZ':     SyntaxItemKind.DJNZ,
-    'EI':       SyntaxItemKind.EI,
-    'EX':       SyntaxItemKind.EX,
-    'EXX':      SyntaxItemKind.EXX, 
-    'HALT':     SyntaxItemKind.HALT,
-    'IM0':      SyntaxItemKind.IM0,
-    'IM1':      SyntaxItemKind.IM1, 
-    'IM2':      SyntaxItemKind.IM2,
-    'INC':      SyntaxItemKind.INC,
-    'IND':      SyntaxItemKind.IND,
-    'INDR':     SyntaxItemKind.INDR,
-    'INI':      SyntaxItemKind.INI,
-    'INIR':     SyntaxItemKind.INIR,
-    'JP':       SyntaxItemKind.JP,
-    'JPNZ':     SyntaxItemKind.JPNZ,
-    'JPZ':      SyntaxItemKind.JPZ,
-    'JPNC':     SyntaxItemKind.JPNC,
-    'JPC':      SyntaxItemKind.JPC,
-    'JPPO':     SyntaxItemKind.JPPO,
-    'JPPE':     SyntaxItemKind.JPPE,
-    'JPP':      SyntaxItemKind.JPP,
-    'JPM':      SyntaxItemKind.JPM,
-    'JR':       SyntaxItemKind.JR,
-    'JRNC':     SyntaxItemKind.JRNC,
-    'JRC':      SyntaxItemKind.JRC,
-    'JRNZ':     SyntaxItemKind.JRNZ,
-    'JRZ':      SyntaxItemKind.JRZ,
-    'LD':       SyntaxItemKind.LD,
-    'LDD':      SyntaxItemKind.LDD,
-    'LDDR':     SyntaxItemKind.LDDR,
-    'LDI':      SyntaxItemKind.LDI,
-    'LDIR':     SyntaxItemKind.LDIR,
-    'NEG':      SyntaxItemKind.NEG,
-    'NOP':      SyntaxItemKind.NOP,
-    'OR':       SyntaxItemKind.OR,
-    'OTDR':     SyntaxItemKind.OTDR,
-    'OTIR':     SyntaxItemKind.OTIR,
-    'OUT':      SyntaxItemKind.OUT,
-    'OUTD':     SyntaxItemKind.OUTD,
-    'OUTI':     SyntaxItemKind.OUTI,
-    'POP':      SyntaxItemKind.POP,
-    'PUSH':     SyntaxItemKind.PUSH,
-    'RES':      SyntaxItemKind.RES,
-    'RET':      SyntaxItemKind.RET,
-    'RETNZ':    SyntaxItemKind.RETNZ,
-    'RETZ':     SyntaxItemKind.RETZ,
-    'RETNC':    SyntaxItemKind.RETNC,
-    'RETC':     SyntaxItemKind.RETC,
-    'RETPO':    SyntaxItemKind.RETPO,
-    'RETPE':    SyntaxItemKind.RETPE,
-    'RETP':     SyntaxItemKind.RETP,
-    'RETM':     SyntaxItemKind.RETM,
-    'RL':       SyntaxItemKind.RL,
-    'RLA':      SyntaxItemKind.RLA,
-    'RLC':      SyntaxItemKind.RLC,
-    'RLD':      SyntaxItemKind.RLD,
-    'RR':       SyntaxItemKind.RR,
-    'RRA':      SyntaxItemKind.RRA,
-    'RRC':      SyntaxItemKind.RRC,
-    'RRCA':     SyntaxItemKind.RRCA,
-    'RRD':      SyntaxItemKind.RRD,
-    'RST':      SyntaxItemKind.RST,
-    'SBC':      SyntaxItemKind.SBC,
-    'SCF':      SyntaxItemKind.SCF,
-    'SET':      SyntaxItemKind.SET,
-    'SLA':      SyntaxItemKind.SLA,
-    'SRA':      SyntaxItemKind.SRA,
-    'SRL':      SyntaxItemKind.SRL,
-    'SUB':      SyntaxItemKind.SUB,
-    'XOR':      SyntaxItemKind.XOR,
-    'B':        SyntaxItemKind.B,
-    'C':        SyntaxItemKind.C,
-    'D':        SyntaxItemKind.D,
-    'E':        SyntaxItemKind.H,
-    'L':        SyntaxItemKind.L,
-    'A':        SyntaxItemKind.A,
-    'F':        SyntaxItemKind.F,
-    'I':        SyntaxItemKind.I,
-    'R':        SyntaxItemKind.R,
-    'BC':       SyntaxItemKind.BC,
-    'DE':       SyntaxItemKind.DE,
-    'HL':       SyntaxItemKind.HL,
-    'AF':       SyntaxItemKind.AF,
-    'IX':       SyntaxItemKind.IX,
-    'IY':       SyntaxItemKind.IY,
-    "AF'":      SyntaxItemKind.AF_,
+    'ORG':      SyntaxItemKind.Keyword,
+    'Z80':      SyntaxItemKind.Keyword,
+    'M6502':    SyntaxItemKind.Keyword, 
+    'INCLUDE':  SyntaxItemKind.Keyword,
+    'INCBIN':   SyntaxItemKind.Keyword,
+    'DB':       SyntaxItemKind.Keyword,
+    'DW':       SyntaxItemKind.Keyword,
+    'CONST':    SyntaxItemKind.Keyword,
+    'MACRO':    SyntaxItemKind.Keyword,
+    'ENDM':     SyntaxItemKind.Keyword,
+    'END':      SyntaxItemKind.Keyword,
+    'ADC':      SyntaxItemKind.Z80Op,
+    'ADD':      SyntaxItemKind.Z80Op,
+    'AND':      SyntaxItemKind.Z80Op,
+    'BIT':      SyntaxItemKind.Z80Op,
+    'CALL':     SyntaxItemKind.Z80Op,
+    'CALLNZ':   SyntaxItemKind.Z80Op,
+    'CALLZ':    SyntaxItemKind.Z80Op,
+    'CALLNC':   SyntaxItemKind.Z80Op,
+    'CALLC':    SyntaxItemKind.Z80Op,
+    'CALLPO':   SyntaxItemKind.Z80Op,
+    'CALLPE':   SyntaxItemKind.Z80Op,
+    'CALLP':    SyntaxItemKind.Z80Op,
+    'CALLM':    SyntaxItemKind.Z80Op,
+    'CCF':      SyntaxItemKind.Z80Op,
+    'CP':       SyntaxItemKind.Z80Op,
+    'CPD':      SyntaxItemKind.Z80Op,
+    'CPDR':     SyntaxItemKind.Z80Op,
+    'CPI':      SyntaxItemKind.Z80Op,
+    'CPIR':     SyntaxItemKind.Z80Op,
+    'CPL':      SyntaxItemKind.Z80Op,
+    'DAA':      SyntaxItemKind.Z80Op,
+    'DEC':      SyntaxItemKind.Z80Op,
+    'DI':       SyntaxItemKind.Z80Op,
+    'DJNZ':     SyntaxItemKind.Z80Op,
+    'EI':       SyntaxItemKind.Z80Op,
+    'EX':       SyntaxItemKind.Z80Op,
+    'EXX':      SyntaxItemKind.Z80Op,
+    'HALT':     SyntaxItemKind.Z80Op,
+    'IM0':      SyntaxItemKind.Z80Op,
+    'IM1':      SyntaxItemKind.Z80Op,
+    'IM2':      SyntaxItemKind.Z80Op,
+    'INC':      SyntaxItemKind.Z80Op,
+    'IND':      SyntaxItemKind.Z80Op,
+    'INDR':     SyntaxItemKind.Z80Op,
+    'INI':      SyntaxItemKind.Z80Op,
+    'INIR':     SyntaxItemKind.Z80Op,
+    'JP':       SyntaxItemKind.Z80Op,
+    'JPNZ':     SyntaxItemKind.Z80Op,
+    'JPZ':      SyntaxItemKind.Z80Op,
+    'JPNC':     SyntaxItemKind.Z80Op,
+    'JPC':      SyntaxItemKind.Z80Op,
+    'JPPO':     SyntaxItemKind.Z80Op,
+    'JPPE':     SyntaxItemKind.Z80Op,
+    'JPP':      SyntaxItemKind.Z80Op,
+    'JPM':      SyntaxItemKind.Z80Op,
+    'JR':       SyntaxItemKind.Z80Op,
+    'JRNC':     SyntaxItemKind.Z80Op,
+    'JRC':      SyntaxItemKind.Z80Op,
+    'JRNZ':     SyntaxItemKind.Z80Op,
+    'JRZ':      SyntaxItemKind.Z80Op,
+    'LD':       SyntaxItemKind.Z80Op,
+    'LDD':      SyntaxItemKind.Z80Op,
+    'LDDR':     SyntaxItemKind.Z80Op,
+    'LDI':      SyntaxItemKind.Z80Op,
+    'LDIR':     SyntaxItemKind.Z80Op,
+    'NEG':      SyntaxItemKind.Z80Op,
+    'NOP':      SyntaxItemKind.Z80Op,
+    'OR':       SyntaxItemKind.Z80Op,
+    'OTDR':     SyntaxItemKind.Z80Op,
+    'OTIR':     SyntaxItemKind.Z80Op,
+    'OUT':      SyntaxItemKind.Z80Op,
+    'OUTD':     SyntaxItemKind.Z80Op,
+    'OUTI':     SyntaxItemKind.Z80Op,
+    'POP':      SyntaxItemKind.Z80Op,
+    'PUSH':     SyntaxItemKind.Z80Op,
+    'RES':      SyntaxItemKind.Z80Op,
+    'RET':      SyntaxItemKind.Z80Op,
+    'RETNZ':    SyntaxItemKind.Z80Op,
+    'RETZ':     SyntaxItemKind.Z80Op,
+    'RETNC':    SyntaxItemKind.Z80Op,
+    'RETC':     SyntaxItemKind.Z80Op,
+    'RETPO':    SyntaxItemKind.Z80Op,
+    'RETPE':    SyntaxItemKind.Z80Op,
+    'RETP':     SyntaxItemKind.Z80Op,
+    'RETM':     SyntaxItemKind.Z80Op,
+    'RL':       SyntaxItemKind.Z80Op,
+    'RLA':      SyntaxItemKind.Z80Op,
+    'RLC':      SyntaxItemKind.Z80Op,
+    'RLD':      SyntaxItemKind.Z80Op,
+    'RR':       SyntaxItemKind.Z80Op,
+    'RRA':      SyntaxItemKind.Z80Op,
+    'RRC':      SyntaxItemKind.Z80Op,
+    'RRCA':     SyntaxItemKind.Z80Op,
+    'RRD':      SyntaxItemKind.Z80Op,
+    'RST':      SyntaxItemKind.Z80Op,
+    'SBC':      SyntaxItemKind.Z80Op,
+    'SCF':      SyntaxItemKind.Z80Op,
+    'SET':      SyntaxItemKind.Z80Op,
+    'SLA':      SyntaxItemKind.Z80Op,
+    'SRA':      SyntaxItemKind.Z80Op,
+    'SRL':      SyntaxItemKind.Z80Op,
+    'SUB':      SyntaxItemKind.Z80Op,
+    'XOR':      SyntaxItemKind.Z80Op,
+    'B':        SyntaxItemKind.Z80R8,
+    'C':        SyntaxItemKind.Z80R8,
+    'D':        SyntaxItemKind.Z80R8,
+    'E':        SyntaxItemKind.Z80R8,
+    'L':        SyntaxItemKind.Z80R8,
+    'A':        SyntaxItemKind.Z80R8,
+    'I':        SyntaxItemKind.Z80RR,
+    'R':        SyntaxItemKind.Z80RI,
+    'BC':       SyntaxItemKind.Z80R16,
+    'DE':       SyntaxItemKind.Z80R16,
+    'HL':       SyntaxItemKind.Z80R16,
+    'AF':       SyntaxItemKind.Z80R16,
+    'IX':       SyntaxItemKind.Z80R16,
+    'IY':       SyntaxItemKind.Z80R16,
+    "AF'":      SyntaxItemKind.Z80R16,
 };
 
 class SyntaxItem {
-    kind:   SyntaxItemKind = SyntaxItemKind.Invalid;
+    kind: SyntaxItemKind = SyntaxItemKind.Invalid;
     str: string = null;
     num: number = 0;
     lo:  number = 0;
     hi:  number = 0;
     line: number = 0;
     valid: boolean = true;
+
+    ToString(): string {
+        return `kind: ${SyntaxItemKindToString(this.kind)} str:${this.str} num:${this.num} line:${this.line}`
+    }
 }
 
 export class Error {
@@ -518,9 +524,11 @@ export class Parser {
             if (token.kind === TokenKind.Comma) {
                 // comma separators are passed through
                 item.kind = SyntaxItemKind.Comma;
+                item.str = ',';
             }
             else if (token.kind === TokenKind.Number) {
                 item.kind = SyntaxItemKind.Number;
+                item.str = token.str;
                 item.num = token.num;
                 item.lo  = token.num & 0xFF;
                 item.hi  = (token.num>>8) & 0xFF;
@@ -548,52 +556,47 @@ export class Parser {
             else if (token.kind === TokenKind.LeftBracket) {
                 token = this.next_token();
                 if (token.kind === TokenKind.Number) {
-                    item.kind = SyntaxItemKind.iImm;
+                    item.kind = SyntaxItemKind.Z80IndImm,
+                    item.str = token.str;
                     item.num = token.num;
                     item.lo = token.num & 0xFF;
                     item.hi = (token.num>>8) & 0xFF;
                 }
                 else if (token.kind === TokenKind.Name) {
-                    if (token.str === 'HL') {
-                        // (HL)
-                        item.kind = SyntaxItemKind.iHL;
-                    }
-                    else if (token.str === 'BC') {
-                        // (BC)
-                        item.kind = SyntaxItemKind.iBC;
-                    }
-                    else if (token.str === 'DE') {
-                        // (DE)
-                        item.kind = SyntaxItemKind.iDE;
-                    }
-                    else if (token.str === 'SP') {
-                        // (SP)
-                        item.kind = SyntaxItemKind.iSP;
-                    }
-                    else if (token.str === 'C') {
-                        // (C)
-                        item.kind = SyntaxItemKind.iC;
-                    }
-                    else if ((token.str === 'IX') || (token.str === 'IY')) {
-                        // (IX), (IY), (IX+d) or (IY+d)
-                        token = this.next_token();
-                        if (token.kind === TokenKind.Plus) {
-                            // (IX+d) or (IY+d)
-                            item.kind = token.str==='IX' ? SyntaxItemKind.iIXd:SyntaxItemKind.iIYd;
+                    item.str = token.str;
+                    switch (token.str) {
+                        case 'HL':
+                        case 'BC':
+                        case 'DE':
+                        case 'SP':
+                            item.kind = SyntaxItemKind.Z80IndR16;
+                            break;
+                        case 'C':
+                            item.kind = SyntaxItemKind.Z80IndC;
+                            break;
+                        case 'IX':
+                        case 'IY':
                             token = this.next_token();
-                            if (token.kind === TokenKind.Number) {
-                                item.num = token.num;
-                                item.lo = token.num & 0xFF;
-                                item.hi = (token.num>>8) && 0xFF;
+                            if (token.kind === TokenKind.Plus) {
+                                // (IX+d) or (IY+d)
+                                item.kind = SyntaxItemKind.Z80IndIdx;
+                                token = this.next_token();
+                                if (token.kind === TokenKind.Number) {
+                                    item.num = token.num;
+                                    item.lo = token.num & 0xFF;
+                                    item.hi = (token.num>>8) && 0xFF;
+                                }
+                                else {
+                                    this.error(item, "expected offset in (IX+d) / (IY+d)")
+                                }
                             }
                             else {
-                                this.error(item, "expected offset in (IX+d) / (IY+d)")
+                                item.kind = SyntaxItemKind.Z80IndR16;
                             }
-                        }
-                        else {
-                            // (IX) or (IY)
-                            item.kind = token.str==='IX' ? SyntaxItemKind.iIX:SyntaxItemKind.iIY;
-                        }
+                            break;
+                        default:
+                            this.error(item, "expected indirection register");
+                            break;
                     }
                     token = this.next_token();
                     if (token.kind !== TokenKind.RightBracket) {

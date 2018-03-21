@@ -48,14 +48,8 @@ parser.Parse(tokens);
 if (parser.HasErrors()) {
     parser.PrintErrors();
 }
-/*
 else {
     for (let item of parser.items) {
-        let str = `${hex16(item.addr)}: `;
-        for (let byte of item.bytes) {
-            str += `${hex8(byte)} `;
-        }
-        console.log(str);
+        console.log(item.ToString());
     }
 }
-*/
