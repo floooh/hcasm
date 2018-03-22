@@ -1,15 +1,15 @@
 import { Tokenizer, Parser, Assembler } from "./hcasm";
 
 function hex8(byte: number): string {
-    return ('00' + byte.toString(16)).slice(-2).toUpperCase();
+    return ("00" + byte.toString(16)).slice(-2).toUpperCase();
 }
 
 function hex16(byte: number): string {
-    return ('0000' + byte.toString(16)).slice(-4).toUpperCase();
+    return ("0000" + byte.toString(16)).slice(-4).toUpperCase();
 }
 
-let tokens = Tokenizer.Tokenize("hello: LD A,#$A0")
-for (let t of tokens) {
+let tokens = Tokenizer.Tokenize("hello: LD A,#$A0");
+for (const t of tokens) {
     console.log(t.ToString());
 }
 
@@ -39,25 +39,25 @@ hello:  di
         daa
         ei
         reti
-`)
-for (let t of tokens) {
+`);
+for (const t of tokens) {
     console.log(t.ToString());
 }
-let parser = new Parser();
-let syntaxItems = parser.Parse(tokens);
+const parser = new Parser();
+const syntaxItems = parser.Parse(tokens);
 if (parser.HasErrors()) {
     parser.PrintErrors();
 }
 else {
-    let asm = new Assembler();
-    let byteRanges = asm.Assemble(syntaxItems);
+    const asm = new Assembler();
+    const byteRanges = asm.Assemble(syntaxItems);
     if (asm.HasErrors()) {
         asm.PrintErrors(); 
     }
     else {
-        for (let rng of byteRanges) {
+        for (const rng of byteRanges) {
             let str = `${hex16(rng.addr)}: `;
-            for (let byte of rng.bytes) {
+            for (const byte of rng.bytes) {
                 str += `${hex8(byte)} `;
             }
             console.log(str);
