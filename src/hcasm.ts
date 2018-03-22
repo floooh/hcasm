@@ -1,3 +1,13 @@
+/**
+ * FIX NUMBER PARSING, the following doesn't produce useful error messages
+ * or even throws exceptions:
+ *  - $§100
+ *  - 0x100
+ * 
+ * FIX NEGATIVE INDEXED INDIRECT INDICES:
+ *  - (IX-2)
+ *  - (IY-6)
+ */
 
 function fatal_if(c: boolean, msg: string) {
     if (c) { throw msg; }
@@ -12,7 +22,7 @@ function is_8bit(val: number) {
 }
 
 function is_16bit(val: number) {
-    return (val >= 0) && (val <= 0xFF);
+    return (val >= 0) && (val <= 0xFFFF);
 }
 
 export enum TokenKind {
@@ -130,17 +140,6 @@ export class Token {
  * a token stream.
  */
 export class Tokenizer {
-    /** tokenize a string into a token array */
-    public static Tokenize(str: string): Token[] {
-        const tokenizer = new Tokenizer(str);
-        const tokens = new Array<Token>();
-        let token = null;
-        while (token = tokenizer.next_token()) {
-            tokens.push(token);
-        }
-        return tokens;
-    }
-
     /** return true if character is a decimal digit */
     private static isDecDigit(c: string): boolean {
         return c >= "0" && c <= "9";
@@ -175,13 +174,24 @@ export class Tokenizer {
     }
 
     private src: string;
-    private pos: number = 0;
-    private start: number = 0;
-    private end: number = 0;
-    private line: number = 0;
+    private pos: number;
+    private start: number;
+    private end: number;
+    private line: number;
     
-    constructor(str: string) {
+    /** tokenize a string into a token array */
+    public Tokenize(str: string): Token[] {
         this.src = str;
+        this.pos = 0;
+        this.start = 0;
+        this.end = 0;
+        this.line = 0;
+        const tokens = new Array<Token>();
+        let token = null;
+        while (token = this.next_token()) {
+            tokens.push(token);
+        }
+        return tokens;
     }
 
     /** return current character in input stream */
@@ -452,14 +462,15 @@ const SyntaxNameMap: {[key: string]: SyntaxItemKind } = {
     "H":        SyntaxItemKind.Z80R8,
     "L":        SyntaxItemKind.Z80R8,
     "A":        SyntaxItemKind.Z80R8,
-    "I":        SyntaxItemKind.Z80RR,
-    "R":        SyntaxItemKind.Z80RI,
+    "I":        SyntaxItemKind.Z80RI,
+    "R":        SyntaxItemKind.Z80RR,
     "BC":       SyntaxItemKind.Z80R16,
     "DE":       SyntaxItemKind.Z80R16,
     "HL":       SyntaxItemKind.Z80R16,
     "AF":       SyntaxItemKind.Z80R16,
     "IX":       SyntaxItemKind.Z80R16,
     "IY":       SyntaxItemKind.Z80R16,
+    "SP":       SyntaxItemKind.Z80R16,
     "AF'":      SyntaxItemKind.Z80R16,
 };
 
@@ -607,10 +618,10 @@ export class Parser {
                             this.error(item, "expected indirection register");
                             break;
                     }
-                    token = this.next_token();
-                    if (token.kind !== TokenKind.RightBracket) {
-                        this.error(item, "expected closing bracket");
-                    }
+                }
+                token = this.next_token();
+                if (token.kind !== TokenKind.RightBracket) {
+                    this.error(item, "expected closing bracket");
                 }
             }
             else {
@@ -1084,10 +1095,49 @@ export class Assembler {
         outp.discard = true;
         this.errors.push(new Error(msg, outp.line));
     }
+}
 
+/** bundle byte ranges into blobs */
+export class Bundler {
+
+    public BundleRaw(ranges: ByteRange[]): Uint8Array {
+        let len = 0;
+        for (const rng of ranges) {
+            len += rng.bytes.length;
+        }
+        const outp = new Uint8Array(len);
+        let index = 0;
+        for (const rng of ranges) {
+            for (const byte of rng.bytes) {
+                outp[index++] = byte;
+            }
+        }
+        return outp;
+    }
 }
 
 export class HCAsm {
+    
+    public static AsmRaw(src: string): Uint8Array|null {
+        const tokenizer = new Tokenizer();
+        const parser = new Parser();
+        const assembler = new Assembler();
+        const bundler = new Bundler();
+        const tokens = tokenizer.Tokenize(src);
+        const syntaxItems = parser.Parse(tokens);
+        if (parser.HasErrors()) {
+            parser.PrintErrors();
+            return null;
+        }
+        const byteRanges = assembler.Assemble(syntaxItems);
+        if (assembler.HasErrors()) {
+            assembler.PrintErrors();
+            return null;
+        }
+        const outp = bundler.BundleRaw(byteRanges);
+        return outp;
+    }
+
     public static hello() {
         console.log("Hello HCAsm");
     }
