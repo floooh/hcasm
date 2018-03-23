@@ -1,14 +1,3 @@
-/**
- * FIX NUMBER PARSING, the following doesn't produce useful error messages
- * or even throws exceptions:
- *  - $§100
- *  - 0x100
- * 
- * FIX NEGATIVE INDEXED INDIRECT INDICES:
- *  - (IX-2)
- *  - (IY-6)
- */
-
 function fatal_if(c: boolean, msg: string) {
     if (c) { throw msg; }
 }
@@ -18,22 +7,24 @@ function fatal(msg: string) {
 }
 
 function is_8bit(val: number) {
-    return (val >= 0) && (val <= 0xFF);
+    return (val >= -128) && (val <= 255);
 }
 
 function is_16bit(val: number) {
-    return (val >= 0) && (val <= 0xFFFF);
+    return (val >= -32768) && (val <= 65536);
 }
 
 export enum TokenKind {
     Invalid,
     Unknown,
+    Error,                  // a low level error during tokenization
     Name,                   // any string
     Number,                 // a number ($ prefix for hex, % prefix for binary)
     String,                 // a string literal (everything between "")
     Comma,                  // ','
     Colon,                  // ':'
     Plus,                   // '+'
+    Minus,                  // '-'
     Pound,                  // '#'
     LeftBracket,            // '('
     RightBracket,           // ')'
@@ -44,12 +35,14 @@ export function TokenKindToString(kind: TokenKind): string {
     switch (kind) {
         case TokenKind.Invalid:         return "Invalid";
         case TokenKind.Unknown:         return "Unknown";
+        case TokenKind.Error:           return "Error";
         case TokenKind.Name:            return "Name";
         case TokenKind.Number:          return "Number";
         case TokenKind.String:          return "String";
         case TokenKind.Comma:           return "Comma";
         case TokenKind.Colon:           return "Colon";
         case TokenKind.Plus:            return "Plus";
+        case TokenKind.Minus:           return "Minus";
         case TokenKind.Pound:           return "Pound";
         case TokenKind.LeftBracket:     return "LeftBracket";
         case TokenKind.RightBracket:    return "RightBracket";
@@ -92,7 +85,10 @@ export class Token {
         token.str = src.slice(start, end).toUpperCase();
         token.line = line;
         token.num = parseInt(token.str, 10);
-        fatal_if(isNaN(token.num), `internal error: failed to parse ${token.str} as integer`);
+        if (isNaN(token.num)) {
+            token.kind = TokenKind.Error;
+            token.str = "Decimal integer parsing error";
+        }
         return token;
     }
 
@@ -103,7 +99,10 @@ export class Token {
         token.str = src.slice(start, end).toUpperCase();
         token.line = line;
         token.num = parseInt(token.str, 16);
-        fatal_if(isNaN(token.num), `internal error: failed to parse ${token.str} as hex`);
+        if (isNaN(token.num)) {
+            token.kind = TokenKind.Error;
+            token.str = "Hexadecimal integer parsing error";
+        }
         return token;
     }
 
@@ -114,7 +113,10 @@ export class Token {
         token.str = src.slice(start, end).toUpperCase();
         token.line = line;
         token.num = parseInt(token.str, 2);
-        fatal_if(isNaN(token.num), `internal error: failed to parse ${token.str} as binary`);
+        if (isNaN(token.num)) {
+            token.kind = TokenKind.Error;
+            token.str = "Binary integer parsing error";
+        }
         return token;
     }
 
@@ -260,6 +262,10 @@ export class Tokenizer {
             else if (c === "+") {
                 this.advance_ignore();
                 return Token.Tag(TokenKind.Plus, this.line);
+            }
+            else if (c === "-") {
+                this.advance_ignore();
+                return Token.Tag(TokenKind.Minus, this.line);
             }
             else if (c === "#") {
                 this.advance_ignore();
@@ -531,10 +537,10 @@ export class Parser {
                 item.kind = SyntaxItemKind.Number;
                 item.str = token.str;
                 item.num = token.num;
-                item.lo  = token.num & 0xFF;
-                item.hi  = (token.num >> 8) & 0xFF;
-                item.is8bit = is_8bit(token.num);
-                item.is16bit = is_16bit(token.num);
+                item.lo  = item.num & 0xFF;
+                item.hi  = (item.num >> 8) & 0xFF;
+                item.is8bit = is_8bit(item.num);
+                item.is16bit = is_16bit(item.num);
             }
             else if (token.kind === TokenKind.String) {
                 // pass through string literals
@@ -568,10 +574,10 @@ export class Parser {
                     item.kind = SyntaxItemKind.Z80IndImm,
                     item.str = token.str;
                     item.num = token.num;
-                    item.lo = token.num & 0xFF;
-                    item.hi = (token.num >> 8) & 0xFF;
-                    item.is8bit = is_8bit(token.num);
-                    item.is16bit = is_16bit(token.num);
+                    item.lo = item.num & 0xFF;
+                    item.hi = (item.num >> 8) & 0xFF;
+                    item.is8bit = is_8bit(item.num);
+                    item.is16bit = is_16bit(item.num);
                     if (!item.is16bit) {
                         this.error(item, "16-bit integer overflow!");
                     }
@@ -592,16 +598,17 @@ export class Parser {
                         case "IY":
                             item.prefix = token.str === "IX" ? 0xDD : 0xFD;
                             token = this.next_token();
-                            if (token.kind === TokenKind.Plus) {
+                            if ((token.kind === TokenKind.Plus) || (token.kind === TokenKind.Minus)) {
                                 // (IX+d) or (IY+d)
+                                const neg = token.kind === TokenKind.Minus;
                                 item.kind = SyntaxItemKind.Z80IndIdx;
                                 token = this.next_token();
                                 if (token.kind === TokenKind.Number) {
-                                    item.num = token.num;
-                                    item.lo = token.num & 0xFF;
+                                    item.num = neg ? -token.num : token.num;
+                                    item.lo = item.num & 0xFF;
                                     item.hi = 0;
-                                    item.is8bit = is_8bit(token.num);
-                                    item.is16bit = is_16bit(token.num);
+                                    item.is8bit = is_8bit(item.num);
+                                    item.is16bit = is_16bit(item.num);
                                     if (!item.is8bit) {
                                         this.error(item, "d in (IX/IY+d) must be an 8-bit value");
                                     }
@@ -623,6 +630,9 @@ export class Parser {
                 if (token.kind !== TokenKind.RightBracket) {
                     this.error(item, "expected closing bracket");
                 }
+            }
+            else if (token.kind === TokenKind.Error) {
+                this.error(item, token.str);
             }
             else {
                 this.error(item, `unhandled token: ${ TokenKindToString(token.kind )}`);
@@ -769,6 +779,9 @@ export class Assembler {
             else if (inp.kind === SyntaxItemKind.Z80Op) {
                 this.asmZ80Op(inp, outp);
             }
+            else {
+                this.error(outp, `Syntax error: ${inp.str}`);
+            }
             if (outp.discard) {
                 outp = new ByteRange();
             }
@@ -863,9 +876,9 @@ export class Assembler {
                 switch (r.kind) {
                     case SyntaxItemKind.Number:
                         // LD r,n
-                        if (this.expect_8bit(outp, r.num)) {
+                        if (this.expect_8bit(outp, r)) {
                             const lbits = Assembler.z80R8bits(l.str);
-                            outp.bytes = [ 0b00000110 | lbits << 3, r.num ];
+                            outp.bytes = [ 0b00000110 | lbits << 3, r.lo ];
                         }
                         break;
                     case SyntaxItemKind.Z80R8:
@@ -908,7 +921,7 @@ export class Assembler {
                         // LD r,(IX|IY+d)
                         {
                             const lbits = Assembler.z80R8bits(l.str);
-                            outp.bytes = [ r.prefix, 0b01000110 | lbits << 3, r.num ];
+                            outp.bytes = [ r.prefix, 0b01000110 | lbits << 3, r.lo ];
                         }
                         break;
                     case SyntaxItemKind.Z80IndImm:
@@ -997,8 +1010,8 @@ export class Assembler {
                 if (l.str === "HL") {
                     // LD (HL),r or LD (HL),n
                     if (r.kind === SyntaxItemKind.Number) {
-                        if (this.expect_8bit(outp, r.num)) {
-                            outp.bytes = [ 0x36, r.num ];
+                        if (this.expect_8bit(outp, r)) {
+                            outp.bytes = [ 0x36, r.lo ];
                         }
                     }
                     else if (r.kind === SyntaxItemKind.Z80R8) {
@@ -1024,13 +1037,13 @@ export class Assembler {
             case SyntaxItemKind.Z80IndIdx:
                 // LD (IX/IY+d),r or LD (IX/IY+d),n
                 if (r.kind === SyntaxItemKind.Number) {
-                    if (this.expect_8bit(outp, r.num)) {
-                        outp.bytes = [ l.prefix, 0x36, l.num, r.num ];
+                    if (this.expect_8bit(outp, r)) {
+                        outp.bytes = [ l.prefix, 0x36, l.lo, r.lo ];
                     }
                 }
                 else if (r.kind === SyntaxItemKind.Z80R8) {
                     const rbits = Assembler.z80R8bits(r.str);
-                    outp.bytes = [ l.prefix, 0b01110000 | rbits, l.num ];
+                    outp.bytes = [ l.prefix, 0b01110000 | rbits, l.lo ];
                 }
                 else {
                     this.error(outp, `invalid src in LD (${l.str}+d),${r.str}`);
@@ -1086,8 +1099,8 @@ export class Assembler {
         return item;
     }
 
-    private expect_8bit(outp: ByteRange, val: number): boolean {
-        if (is_8bit(val)) { return true; }
+    private expect_8bit(outp: ByteRange, item: SyntaxItem): boolean {
+        if (item.is8bit) { return true; }
         else { this.error(outp, "8-bit overflow"); }
     }
 

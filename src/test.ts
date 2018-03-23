@@ -27,8 +27,8 @@ function ok(msg: string) {
     console.log(chalk.green(msg));
 }
 
-function test(name: string, outp: Uint8Array, expected: Uint8Array) {
-    const l0 = outp.length;
+function test(name: string, blob: Uint8Array, expected: Uint8Array) {
+    const l0 = (blob === null) ? 0 : blob.length;
     const l1 = expected.length;
     if (l0 !== l1) {
         err(`${name}: output sizes don't match`);
@@ -37,7 +37,7 @@ function test(name: string, outp: Uint8Array, expected: Uint8Array) {
     let match = true;
     let i = 0;    
     for (i = 0; i < l0; i++) {
-        if (outp[i] !== expected[i]) {
+        if (blob[i] !== expected[i]) {
             match = false;
             break;
         }
@@ -52,7 +52,7 @@ function test(name: string, outp: Uint8Array, expected: Uint8Array) {
             if ((i0 % 16) === 0) {
                 process.stdout.write("\n");
             }
-            process.stdout.write(`${hex8(outp[i0])} `);
+            process.stdout.write(`${hex8(blob[i0])} `);
         }
         console.log("\n\nexpected:");
         for (let i0 = 0; i0 <= i; i0++) {
@@ -234,7 +234,6 @@ function LD_r_iHL() {
 }
 
 function LD_r_iIXIY() {
-    // FIXME: need to handle (IX-xx)
     const outp = HCAsm.AsmRaw(`
         LD IX,$1003
         LD A,$12
@@ -244,13 +243,13 @@ function LD_r_iIXIY() {
         LD C,$14
         LD (IX+2),C
         LD D,$15
-        LD (IX+$FF),D
+        LD (IX-1),D
         LD E,$16
-        LD (IX+$FE),E
+        LD (IX-2),E
         LD H,$17
         LD (IX+3),H
         LD L,$18
-        LD (IX+$FD),L
+        LD (IX-3),L
         LD IY,$1003
         LD A,$12
         LD (IY+0),A
@@ -259,13 +258,13 @@ function LD_r_iIXIY() {
         LD C,$14
         LD (IY+2),C
         LD D,$15
-        LD (IY+$FF),D
+        LD (IY-1),D
         LD E,$16
-        LD (IY+$FE),E
+        LD (IY-2),E
         LD H,$17
         LD (IY+3),H
         LD L,$18
-        LD (IY+$FD),L
+        LD (IY-3),L
     `);
     test("LD_r_iIXIY", outp, new Uint8Array([
         0xDD, 0x21, 0x03, 0x10,     // LD IX,0x1003
@@ -345,13 +344,13 @@ function LD_iIXIY_r() {
         LD C,$14
         LD (IX+2),C
         LD D,$15
-        LD (IX+$FF),D
+        LD (IX-1),D
         LD E,$16
-        LD (IX+$FE),E
+        LD (IX-2),E
         LD H,$17
         LD (IX+3),H
         LD L,$18
-        LD (IX+$FD),L
+        LD (IX-3),L
         LD IY,$1003
         LD A,$12
         LD (IY+0),A
@@ -360,13 +359,13 @@ function LD_iIXIY_r() {
         LD C,$14
         LD (IY+2),C
         LD D,$15
-        LD (IY+$ff),D
+        LD (IY-1),D
         LD E,$16
-        LD (IY+$FE),E
+        LD (IY-2),E
         LD H,$17
         LD (IY+3),H
         LD L,$18
-        LD (IY+$FD),L    
+        LD (IY-3),L    
     `);
     test("LD_iIXIY_r", outp, new Uint8Array([
         0xDD, 0x21, 0x03, 0x10,     // LD IX,0x1003
