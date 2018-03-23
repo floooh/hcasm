@@ -564,6 +564,481 @@ function LD_A_RI() {
     ]));
 }
 
+function ADD_rn() {
+    const outp = HCAsm.AsmRaw(`
+        LD A,$0F
+        ADD A
+        LD B,$E0
+        ADD B
+        LD A,$81
+        LD C,$80
+        ADD C
+        LD D,$FF
+        ADD D
+        LD E,$40
+        ADD E
+        LD H,$80
+        ADD H
+        LD L,$33
+        ADD L
+        ADD $44    
+    `);
+    test("ADD_rn", outp, new Uint8Array([
+        0x3E, 0x0F,     // LD A,0x0F
+        0x87,           // ADD A,A
+        0x06, 0xE0,     // LD B,0xE0
+        0x80,           // ADD A,B
+        0x3E, 0x81,     // LD A,0x81
+        0x0E, 0x80,     // LD C,0x80
+        0x81,           // ADD A,C
+        0x16, 0xFF,     // LD D,0xFF
+        0x82,           // ADD A,D
+        0x1E, 0x40,     // LD E,0x40
+        0x83,           // ADD A,E
+        0x26, 0x80,     // LD H,0x80
+        0x84,           // ADD A,H
+        0x2E, 0x33,     // LD L,0x33
+        0x85,           // ADD A,L
+        0xC6, 0x44,     // ADD A,0x44
+    ]));
+}
+
+function ADD_iHLIXIY() {
+    const outp = HCAsm.AsmRaw(`
+        LD HL,$1000
+        LD IX,$1000
+        LD IY,$1003
+        LD A,$00
+        ADD (HL)
+        ADD (IX+1)
+        ADD (IY-1)    
+    `);
+    test("ADD_iHLIXIY", outp, new Uint8Array([
+        0x21, 0x00, 0x10,       // LD HL,0x1000
+        0xDD, 0x21, 0x00, 0x10, // LD IX,0x1000
+        0xFD, 0x21, 0x03, 0x10, // LD IY,0x1003
+        0x3E, 0x00,             // LD A,0x00
+        0x86,                   // ADD A,(HL)
+        0xDD, 0x86, 0x01,       // ADD A,(IX+1)
+        0xFD, 0x86, 0xFF,       // ADD A,(IY-1)
+    ]));
+}
+
+function ADC_rn() {
+    const outp = HCAsm.AsmRaw(`
+        LD A,$00
+        LD B,$41
+        LD C,$61
+        LD D,$81
+        LD E,$41
+        LD H,$61
+        LD L,$81
+        ADC A
+        ADC B
+        ADC C
+        ADC D
+        ADC E
+        ADC H
+        ADC L
+        ADC $01    
+    `);
+    test("ADC_rn", outp, new Uint8Array([
+        0x3E, 0x00,         // LD A,0x00
+        0x06, 0x41,         // LD B,0x41
+        0x0E, 0x61,         // LD C,0x61
+        0x16, 0x81,         // LD D,0x81
+        0x1E, 0x41,         // LD E,0x41
+        0x26, 0x61,         // LD H,0x61
+        0x2E, 0x81,         // LD L,0x81
+        0x8F,               // ADC A,A
+        0x88,               // ADC A,B
+        0x89,               // ADC A,C
+        0x8A,               // ADC A,D
+        0x8B,               // ADC A,E
+        0x8C,               // ADC A,H
+        0x8D,               // ADC A,L
+        0xCE, 0x01,         // ADC A,0x01        
+    ]));
+}
+
+function ADC_iHLIXIY() {
+    const outp = HCAsm.AsmRaw(`
+        LD HL,$1000
+        LD IX,$1000
+        LD IY,$1003
+        LD A,$00
+        ADD (HL)
+        ADC (IX+1)
+        ADC (IY-1)
+        ADC (IX+3)    
+    `);
+    test("ADC_iHLIXIY", outp, new Uint8Array([
+        0x21, 0x00, 0x10,       // LD HL,0x1000
+        0xDD, 0x21, 0x00, 0x10, // LD IX,0x1000
+        0xFD, 0x21, 0x03, 0x10, // LD IY,0x1003
+        0x3E, 0x00,             // LD A,0x00
+        0x86,                   // ADD A,(HL)
+        0xDD, 0x8E, 0x01,       // ADC A,(IX+1)
+        0xFD, 0x8E, 0xFF,       // ADC A,(IY-1)
+        0xDD, 0x8E, 0x03,       // ADC A,(IX+3)
+    ]));
+}
+
+function SUB_rn() {
+    const outp = HCAsm.AsmRaw(`
+        LD A,$04
+        LD B,$01
+        LD C,$F8
+        LD D,$0F
+        LD E,$79
+        LD H,$C0
+        LD L,$BF
+        SUB A
+        SUB B
+        SUB C
+        SUB D
+        SUB E
+        SUB H
+        SUB L
+        SUB $01
+        SUB $FE
+    `);
+    test("SUB_rn", outp, new Uint8Array([
+        0x3E, 0x04,     // LD A,0x04
+        0x06, 0x01,     // LD B,0x01
+        0x0E, 0xF8,     // LD C,0xF8
+        0x16, 0x0F,     // LD D,0x0F
+        0x1E, 0x79,     // LD E,0x79
+        0x26, 0xC0,     // LD H,0xC0
+        0x2E, 0xBF,     // LD L,0xBF
+        0x97,           // SUB A,A
+        0x90,           // SUB A,B
+        0x91,           // SUB A,C
+        0x92,           // SUB A,D
+        0x93,           // SUB A,E
+        0x94,           // SUB A,H
+        0x95,           // SUB A,L
+        0xD6, 0x01,     // SUB A,0x01
+        0xD6, 0xFE,     // SUB A,0xFE
+    ]));
+}
+
+function SUB_iHLIXIY() {
+    const outp = HCAsm.AsmRaw(`
+        LD HL,$1000
+        LD IX,$1000
+        LD IY,$1003
+        LD A,$00
+        SUB (HL)
+        SUB (IX+1)
+        SUB (IY-2)
+    `);
+    test("SUB_iHLIXIY", outp, new Uint8Array([
+        0x21, 0x00, 0x10,       // LD HL,0x1000
+        0xDD, 0x21, 0x00, 0x10, // LD IX,0x1000
+        0xFD, 0x21, 0x03, 0x10, // LD IY,0x1003
+        0x3E, 0x00,             // LD A,0x00
+        0x96,                   // SUB A,(HL)
+        0xDD, 0x96, 0x01,       // SUB A,(IX+1)
+        0xFD, 0x96, 0xFE,       // SUB A,(IY-2)
+    ]));
+}
+
+function CP_rn() {
+    const outp = HCAsm.AsmRaw(`
+        LD A,$04
+        LD B,$05
+        LD C,$03
+        LD D,$ff
+        LD E,$aa
+        LD H,$80
+        LD L,$7f
+        CP A
+        CP B
+        CP C
+        CP D
+        CP E
+        CP H
+        CP L
+        CP $04    
+    `);
+    test("CP_rn", outp, new Uint8Array([
+        0x3E, 0x04,     // LD A,0x04
+        0x06, 0x05,     // LD B,0x05
+        0x0E, 0x03,     // LD C,0x03
+        0x16, 0xff,     // LD D,0xff
+        0x1E, 0xaa,     // LD E,0xaa
+        0x26, 0x80,     // LD H,0x80
+        0x2E, 0x7f,     // LD L,0x7f
+        0xBF,           // CP A
+        0xB8,           // CP B
+        0xB9,           // CP C
+        0xBA,           // CP D
+        0xBB,           // CP E
+        0xBC,           // CP H
+        0xBD,           // CP L
+        0xFE, 0x04,     // CP 0x04        
+    ]));
+}
+
+function CP_iHLIXIY() {
+    const outp = HCAsm.AsmRaw(`
+        LD HL,$1000
+        LD IX,$1000
+        LD IY,$1003
+        LD A,$41
+        CP (HL)
+        CP (IX+1)
+        CP (IY-1)    
+    `);
+    test("CP_iHLIXIY", outp, new Uint8Array([
+        0x21, 0x00, 0x10,       // LD HL,0x1000
+        0xDD, 0x21, 0x00, 0x10, // LD IX,0x1000
+        0xFD, 0x21, 0x03, 0x10, // LD IY,0x1003
+        0x3E, 0x41,             // LD A,0x41
+        0xBE,                   // CP (HL)
+        0xDD, 0xBE, 0x01,       // CP (IX+1)
+        0xFD, 0xBE, 0xFF,       // CP (IY-1)
+    ]));
+}
+
+function SBC_rn() {
+    const outp = HCAsm.AsmRaw(`
+        LD A,$04
+        LD B,$01
+        LD C,$F8
+        LD D,$0F
+        LD E,$79
+        LD H,$C0
+        LD L,$BF
+        SUB A
+        SBC B
+        SBC C
+        SBC D
+        SBC E
+        SBC H
+        SBC L
+        SBC $01
+        SBC $FE    
+    `);
+    test("SBC_rn", outp, new Uint8Array([
+        0x3E, 0x04,     // LD A,0x04
+        0x06, 0x01,     // LD B,0x01
+        0x0E, 0xF8,     // LD C,0xF8
+        0x16, 0x0F,     // LD D,0x0F
+        0x1E, 0x79,     // LD E,0x79
+        0x26, 0xC0,     // LD H,0xC0
+        0x2E, 0xBF,     // LD L,0xBF
+        0x97,           // SUB A,A
+        0x98,           // SBC A,B
+        0x99,           // SBC A,C
+        0x9A,           // SBC A,D
+        0x9B,           // SBC A,E
+        0x9C,           // SBC A,H
+        0x9D,           // SBC A,L
+        0xDE, 0x01,     // SBC A,0x01
+        0xDE, 0xFE,     // SBC A,0xFE
+    ]));
+}
+
+function SBC_iHLIXIY() {
+    const outp = HCAsm.AsmRaw(`
+        LD HL,$1000
+        LD IX,$1000
+        LD IY,$1003
+        LD A,$00
+        SBC (HL)
+        SBC (IX+1)
+        SBC (IY-2)    
+    `);
+    test("SBC_iHLIXIY", outp, new Uint8Array([
+        0x21, 0x00, 0x10,       // LD HL,0x1000
+        0xDD, 0x21, 0x00, 0x10, // LD IX,0x1000
+        0xFD, 0x21, 0x03, 0x10, // LD IY,0x1003
+        0x3E, 0x00,             // LD A,0x00
+        0x9E,                   // SBC A,(HL)
+        0xDD, 0x9E, 0x01,       // SBC A,(IX+1)
+        0xFD, 0x9E, 0xFE,       // SBC A,(IY-2)
+    ]));
+}
+
+function OR_rn() {
+    const outp = HCAsm.AsmRaw(`
+        SUB A
+        LD B,$01
+        LD C,$02
+        LD D,$04
+        LD E,$08
+        LD H,$10
+        LD L,$20
+        OR A
+        OR B
+        OR C
+        OR D
+        OR E
+        OR H
+        OR L
+        OR $40
+        OR $80    
+    `);
+    test("OR_rn", outp, new Uint8Array([
+        0x97,           // SUB A
+        0x06, 0x01,     // LD B,0x01
+        0x0E, 0x02,     // LD C,0x02
+        0x16, 0x04,     // LD D,0x04
+        0x1E, 0x08,     // LD E,0x08
+        0x26, 0x10,     // LD H,0x10
+        0x2E, 0x20,     // LD L,0x20
+        0xB7,           // OR A
+        0xB0,           // OR B
+        0xB1,           // OR C
+        0xB2,           // OR D
+        0xB3,           // OR E
+        0xB4,           // OR H
+        0xB5,           // OR L
+        0xF6, 0x40,     // OR 0x40
+        0xF6, 0x80,     // OR 0x80
+    ]));
+}
+
+function XOR_rn() {
+    const outp = HCAsm.AsmRaw(`
+        SUB A
+        LD B,$01
+        LD C,$03
+        LD D,$07
+        LD E,$0F
+        LD H,$1F
+        LD L,$3F
+        XOR A
+        XOR B
+        XOR C
+        XOR D
+        XOR E
+        XOR H
+        XOR L
+        XOR $7F
+        XOR $FF
+    `);
+    test("XOR_rn", outp, new Uint8Array([
+        0x97,           // SUB A
+        0x06, 0x01,     // LD B,0x01
+        0x0E, 0x03,     // LD C,0x03
+        0x16, 0x07,     // LD D,0x07
+        0x1E, 0x0F,     // LD E,0x0F
+        0x26, 0x1F,     // LD H,0x1F
+        0x2E, 0x3F,     // LD L,0x3F
+        0xAF,           // XOR A
+        0xA8,           // XOR B
+        0xA9,           // XOR C
+        0xAA,           // XOR D
+        0xAB,           // XOR E
+        0xAC,           // XOR H
+        0xAD,           // XOR L
+        0xEE, 0x7F,     // XOR 0x7F
+        0xEE, 0xFF,     // XOR 0xFF
+    ]));
+}
+
+function OR_XOR_iHLIXIY() {
+    const outp = HCAsm.AsmRaw(`
+        LD A,$00
+        LD HL,$1000
+        LD IX,$1000
+        LD IY,$1003
+        OR (HL)
+        OR (IX+1)
+        OR (IY-1)
+        XOR (HL)
+        XOR (IX+1)
+        XOR (IY-1)
+    `);
+    test("OR_XOR_iHLIXIY", outp, new Uint8Array([
+        0x3E, 0x00,                 // LD A,0x00
+        0x21, 0x00, 0x10,           // LD HL,0x1000
+        0xDD, 0x21, 0x00, 0x10,     // LD IX,0x1000
+        0xFD, 0x21, 0x03, 0x10,     // LD IY,0x1003
+        0xB6,                       // OR (HL)
+        0xDD, 0xB6, 0x01,           // OR (IX+1)
+        0xFD, 0xB6, 0xFF,           // OR (IY-1)
+        0xAE,                       // XOR (HL)
+        0xDD, 0xAE, 0x01,           // XOR (IX+1)
+        0xFD, 0xAE, 0xFF,           // XOR (IY-1)
+    ]));
+}
+
+function AND_rn() {
+    const outp = HCAsm.AsmRaw(`
+        LD A,$FF
+        LD B,$01
+        LD C,$03
+        LD D,$04
+        LD E,$08
+        LD H,$10
+        LD L,$20
+        AND B
+        OR $FF
+        AND C
+        OR $FF
+        AND D
+        OR $FF
+        AND E
+        OR $FF
+        AND H
+        OR $FF
+        AND L
+        OR $FF
+        AND $40
+        OR $FF
+        AND $AA
+    `);
+    test("AND_rn", outp, new Uint8Array([
+        0x3E, 0xFF,             // LD A,0xFF
+        0x06, 0x01,             // LD B,0x01
+        0x0E, 0x03,             // LD C,0x03
+        0x16, 0x04,             // LD D,0x04
+        0x1E, 0x08,             // LD E,0x08
+        0x26, 0x10,             // LD H,0x10
+        0x2E, 0x20,             // LD L,0x20
+        0xA0,                   // AND B
+        0xF6, 0xFF,             // OR 0xFF
+        0xA1,                   // AND C
+        0xF6, 0xFF,             // OR 0xFF
+        0xA2,                   // AND D
+        0xF6, 0xFF,             // OR 0xFF
+        0xA3,                   // AND E
+        0xF6, 0xFF,             // OR 0xFF
+        0xA4,                   // AND H
+        0xF6, 0xFF,             // OR 0xFF
+        0xA5,                   // AND L
+        0xF6, 0xFF,             // OR 0xFF
+        0xE6, 0x40,             // AND 0x40
+        0xF6, 0xFF,             // OR 0xFF
+        0xE6, 0xAA,             // AND 0xAA
+    ]));
+}
+
+function AND_iHLIXIY() {
+    const outp = HCAsm.AsmRaw(`
+        LD HL,$1000
+        LD IX,$1000
+        LD IY,$1003
+        LD A,$FF
+        AND (HL)
+        AND (IX+1)
+        AND (IY-1)
+    `);
+    test("AND_iHLIXIY", outp, new Uint8Array([
+        0x21, 0x00, 0x10,           // LD HL,0x1000
+        0xDD, 0x21, 0x00, 0x10,     // LD IX,0x1000
+        0xFD, 0x21, 0x03, 0x10,     // LD IY,0x1003
+        0x3E, 0xFF,                 // LD A,0xFF
+        0xA6,                       // AND (HL)
+        0xDD, 0xA6, 0x01,           // AND (IX+1)
+        0xFD, 0xA6, 0xFF,           // AND (IY-1)
+    ]));
+}
+
 LD_r_sn();
 LD_r_iHL();
 LD_r_iIXIY();
@@ -578,6 +1053,21 @@ LD_inn_HLddIXIY();
 LD_SP_HLIXIY();
 LD_IR_A();
 LD_A_RI();
+ADD_rn();
+ADD_iHLIXIY();
+ADC_rn();
+ADC_iHLIXIY();
+SUB_rn();
+SUB_iHLIXIY();
+CP_rn();
+CP_iHLIXIY();
+SBC_rn();
+SBC_iHLIXIY();
+OR_rn();
+XOR_rn();
+OR_XOR_iHLIXIY();
+AND_rn();
+AND_iHLIXIY();
 
 if (NumErrors === 0) {
     console.log(chalk.green("\n\nALL TESTS OK!"));

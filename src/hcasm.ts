@@ -1,3 +1,5 @@
+// KC85 assembler mnemonik: http://www.mpm-kc85.de/dokupack/M027_Development.pdf
+
 function fatal_if(c: boolean, msg: string) {
     if (c) { throw msg; }
 }
@@ -373,14 +375,6 @@ const SyntaxNameMap: {[key: string]: SyntaxItemKind } = {
     "AND":      SyntaxItemKind.Z80Op,
     "BIT":      SyntaxItemKind.Z80Op,
     "CALL":     SyntaxItemKind.Z80Op,
-    "CALLNZ":   SyntaxItemKind.Z80Op,
-    "CALLZ":    SyntaxItemKind.Z80Op,
-    "CALLNC":   SyntaxItemKind.Z80Op,
-    "CALLC":    SyntaxItemKind.Z80Op,
-    "CALLPO":   SyntaxItemKind.Z80Op,
-    "CALLPE":   SyntaxItemKind.Z80Op,
-    "CALLP":    SyntaxItemKind.Z80Op,
-    "CALLM":    SyntaxItemKind.Z80Op,
     "CCF":      SyntaxItemKind.Z80Op,
     "CP":       SyntaxItemKind.Z80Op,
     "CPD":      SyntaxItemKind.Z80Op,
@@ -396,28 +390,14 @@ const SyntaxNameMap: {[key: string]: SyntaxItemKind } = {
     "EX":       SyntaxItemKind.Z80Op,
     "EXX":      SyntaxItemKind.Z80Op,
     "HALT":     SyntaxItemKind.Z80Op,
-    "IM0":      SyntaxItemKind.Z80Op,
-    "IM1":      SyntaxItemKind.Z80Op,
-    "IM2":      SyntaxItemKind.Z80Op,
+    "IM":       SyntaxItemKind.Z80Op,
     "INC":      SyntaxItemKind.Z80Op,
     "IND":      SyntaxItemKind.Z80Op,
     "INDR":     SyntaxItemKind.Z80Op,
     "INI":      SyntaxItemKind.Z80Op,
     "INIR":     SyntaxItemKind.Z80Op,
-    "JP":       SyntaxItemKind.Z80Op,
-    "JPNZ":     SyntaxItemKind.Z80Op,
-    "JPZ":      SyntaxItemKind.Z80Op,
-    "JPNC":     SyntaxItemKind.Z80Op,
-    "JPC":      SyntaxItemKind.Z80Op,
-    "JPPO":     SyntaxItemKind.Z80Op,
-    "JPPE":     SyntaxItemKind.Z80Op,
-    "JPP":      SyntaxItemKind.Z80Op,
-    "JPM":      SyntaxItemKind.Z80Op,
+    "JP":      SyntaxItemKind.Z80Op,
     "JR":       SyntaxItemKind.Z80Op,
-    "JRNC":     SyntaxItemKind.Z80Op,
-    "JRC":      SyntaxItemKind.Z80Op,
-    "JRNZ":     SyntaxItemKind.Z80Op,
-    "JRZ":      SyntaxItemKind.Z80Op,
     "LD":       SyntaxItemKind.Z80Op,
     "LDD":      SyntaxItemKind.Z80Op,
     "LDDR":     SyntaxItemKind.Z80Op,
@@ -435,14 +415,8 @@ const SyntaxNameMap: {[key: string]: SyntaxItemKind } = {
     "PUSH":     SyntaxItemKind.Z80Op,
     "RES":      SyntaxItemKind.Z80Op,
     "RET":      SyntaxItemKind.Z80Op,
-    "RETNZ":    SyntaxItemKind.Z80Op,
-    "RETZ":     SyntaxItemKind.Z80Op,
-    "RETNC":    SyntaxItemKind.Z80Op,
-    "RETC":     SyntaxItemKind.Z80Op,
-    "RETPO":    SyntaxItemKind.Z80Op,
-    "RETPE":    SyntaxItemKind.Z80Op,
-    "RETP":     SyntaxItemKind.Z80Op,
-    "RETM":     SyntaxItemKind.Z80Op,
+    "RETI":     SyntaxItemKind.Z80Op,
+    "RETN":     SyntaxItemKind.Z80Op,
     "RL":       SyntaxItemKind.Z80Op,
     "RLA":      SyntaxItemKind.Z80Op,
     "RLC":      SyntaxItemKind.Z80Op,
@@ -726,6 +700,22 @@ export class Assembler {
         }
     }
 
+    private static z80ALUbits(alu: string): number {
+        switch (alu) {
+            case "ADD": return 0b000;
+            case "ADC": return 0b001;
+            case "SUB": return 0b010;
+            case "SBC": return 0b011;
+            case "AND": return 0b100;
+            case "XOR": return 0b101;
+            case "OR":  return 0b110;
+            case "CP":  return 0b111;
+            default:
+                fatal("invalid z80 alu op name!");
+                return 0;
+        }
+    }
+
     public addr: number = 0;
     public cpu: CPUType = CPUType.None;
     public syntaxItemIndex: number = 0;
@@ -826,9 +816,6 @@ export class Assembler {
             case "HALT":    outp.bytes = [ 0x76 ]; break;
             case "DI":      outp.bytes = [ 0xF3 ]; break;
             case "EI":      outp.bytes = [ 0xFB ]; break;
-            case "IM0":     outp.bytes = [ 0xED, 0x46 ]; break;
-            case "IM1":     outp.bytes = [ 0xED, 0x56 ]; break;
-            case "IM2":     outp.bytes = [ 0xED, 0x5E ]; break;
             case "RLCA":    outp.bytes = [ 0x07 ]; break;
             case "RLA":     outp.bytes = [ 0x17 ]; break;
             case "RRCA":    outp.bytes = [ 0x0F ]; break;
@@ -836,14 +823,6 @@ export class Assembler {
             case "RLD":     outp.bytes = [ 0xED, 0x6F ]; break;
             case "RRD":     outp.bytes = [ 0xED, 0x67 ]; break;
             case "RET":     outp.bytes = [ 0xC9 ]; break;
-            case "RETNZ":   outp.bytes = [ 0xC0 ]; break;
-            case "RETZ":    outp.bytes = [ 0xC8 ]; break;
-            case "RETNC":   outp.bytes = [ 0xD0 ]; break;
-            case "RETC":    outp.bytes = [ 0xD8 ]; break;
-            case "RETPO":   outp.bytes = [ 0xE0 ]; break;
-            case "RETPE":   outp.bytes = [ 0xE8 ]; break;
-            case "RETP":    outp.bytes = [ 0xF0 ]; break;
-            case "RETM":    outp.bytes = [ 0xF8 ]; break;
             case "RETI":    outp.bytes = [ 0xED, 0x4D ]; break;
             case "RETN":    outp.bytes = [ 0xED, 0x45 ]; break;
             case "INI":     outp.bytes = [ 0xED, 0xA2 ]; break;
@@ -854,10 +833,54 @@ export class Assembler {
             case "OTIR":    outp.bytes = [ 0xED, 0xB3 ]; break;
             case "OUTD":    outp.bytes = [ 0xED, 0xAB ]; break;
             case "OTDR":    outp.bytes = [ 0xED, 0xBB ]; break;
-            case "LD":      this.asmZ80LD(outp); break;
+            case "LD":
+                this.asmZ80LD(outp);
+                break;
+            case "ADD": case "ADC": case "SUB": case "SBC":
+            case "AND": case "XOR": case "OR": case "CP":
+                this.asmZ80ALU(inp.str, outp);
+                break;
             default:
                 this.error(outp, `FIXME: Z80 OP ${inp.str}`);
                 break;
+        }
+    }
+
+    private asmZ80ALU(alu: string, outp: ByteRange) {
+        const l = this.next_item();
+        // 16-bit operation?
+        if (l.kind === SyntaxItemKind.Z80R16) {
+            // FIXME
+            this.error(outp, "FIXME: 16-bit ALU operation");
+        }
+        else {
+            const alubits = Assembler.z80ALUbits(alu);
+            switch (l.kind) {
+                case SyntaxItemKind.Number:
+                    // ALU n
+                    if (this.expect_8bit(outp, l)) {
+                        outp.bytes = [ 0b11000110 | alubits << 3, l.lo ];
+                    }
+                    break;
+                case SyntaxItemKind.Z80R8:
+                    // ALU r
+                    const rbits = Assembler.z80R8bits(l.str);
+                    outp.bytes = [ 0b10000000 | alubits << 3 | rbits ];
+                    break;
+                case SyntaxItemKind.Z80IndR16:
+                    // ALU (HL)
+                    if (this.expect_iHL(outp, l)) {
+                        outp.bytes = [ 0b10000110 | alubits << 3];
+                    }
+                    break;
+                case SyntaxItemKind.Z80IndIdx:
+                    // ALU (IX|IY+d)
+                    outp.bytes = [ l.prefix, 0b10000110 | alubits << 3, l.lo ];
+                    break;
+                default:
+                    this.error(outp, `invalid 8-bit ALU operand: ${l.str}`);
+                    break;
+            }
         }
     }
 
@@ -1102,6 +1125,15 @@ export class Assembler {
     private expect_8bit(outp: ByteRange, item: SyntaxItem): boolean {
         if (item.is8bit) { return true; }
         else { this.error(outp, "8-bit overflow"); }
+    }
+
+    private expect_iHL(outp: ByteRange, item: SyntaxItem): boolean {
+        if ((item.kind === SyntaxItemKind.Z80IndR16) && (item.str === "HL")) {
+            return true;
+        }
+        else {
+            this.error(outp, "expected (HL)");
+        }
     }
 
     private error(outp: ByteRange, msg: string) {
