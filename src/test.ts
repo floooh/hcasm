@@ -4,6 +4,7 @@
  */
 import { Tokenizer, Parser, Assembler, HCAsm } from "./hcasm";
 import * as process from "process";
+import chalk from "chalk";
 
 function hex8(byte: number): string {
     return ("00" + byte.toString(16)).slice(-2).toUpperCase();
@@ -13,12 +14,25 @@ function hex16(byte: number): string {
     return ("0000" + byte.toString(16)).slice(-4).toUpperCase();
 }
 
-function test(name: string, outp: Uint8Array, expected: Uint8Array): boolean {
+let NumErrors = 0;
+let NumOk = 0;
+
+function err(msg: string) {
+    NumErrors++;
+    console.log(chalk.red(msg));
+}
+
+function ok(msg: string) {
+    NumOk++;
+    console.log(chalk.green(msg));
+}
+
+function test(name: string, outp: Uint8Array, expected: Uint8Array) {
     const l0 = outp.length;
     const l1 = expected.length;
     if (l0 !== l1) {
-        console.log(`${name}: output sizes don't match`);
-        return false;
+        err(`${name}: output sizes don't match`);
+        return;
     }
     let match = true;
     let i = 0;    
@@ -29,10 +43,10 @@ function test(name: string, outp: Uint8Array, expected: Uint8Array): boolean {
         }
     }
     if (match) {
-        console.log(`${name}: OK`);
+        ok(`${name}: OK`);
     }
     else {
-        console.log(`${name}: byte mismatch at index ${i}`);
+        err(`${name}: byte mismatch at index ${i}`);
         console.log("\ngot:");
         for (let i0 = 0; i0 <= i; i0++) {
             if ((i0 % 16) === 0) {
@@ -49,10 +63,7 @@ function test(name: string, outp: Uint8Array, expected: Uint8Array): boolean {
         }
         console.log("\n");
     }
-    return match;
 }
-
-let SUCCESS = true;
 
 function LD_r_sn() {
     const outp = HCAsm.AsmRaw(`
@@ -121,7 +132,7 @@ function LD_r_sn() {
         ld l,l
         ld a,l
     `);
-    SUCCESS = SUCCESS && test("ld_r_sn", outp, new Uint8Array([
+    test("ld_r_sn", outp, new Uint8Array([
         0x3E, 0x12,     // LD A,0x12
         0x47,           // LD B,A
         0x4F,           // LD C,A
@@ -205,7 +216,7 @@ function LD_r_iHL() {
         ld l,0
         ld a,(hl) 
     `);
-    SUCCESS = SUCCESS && test("ld_r_iHL", outp, new Uint8Array([
+    test("ld_r_iHL", outp, new Uint8Array([
         0x21, 0x00, 0x10,   // LD HL,0x1000
         0x3E, 0x33,         // LD A,0x33
         0x77,               // LD (HL),A
@@ -256,7 +267,7 @@ function LD_r_iIXIY() {
         LD L,$18
         LD (IY+$FD),L
     `);
-    SUCCESS = SUCCESS && test("LD_r_iIXIY", outp, new Uint8Array([
+    test("LD_r_iIXIY", outp, new Uint8Array([
         0xDD, 0x21, 0x03, 0x10,     // LD IX,0x1003
         0x3E, 0x12,                 // LD A,0x12
         0xDD, 0x77, 0x00,           // LD (IX+0),A
@@ -306,7 +317,7 @@ function LD_iHL_r() {
         LD (HL),H
         LD (HL),L
     `);
-    SUCCESS = SUCCESS && test("LD_iHL_r", outp, new Uint8Array([
+    test("LD_iHL_r", outp, new Uint8Array([
         0x21, 0x00, 0x10,   // LD HL,0x1000
         0x3E, 0x12,         // LD A,0x12
         0x77,               // LD (HL),A
@@ -357,7 +368,7 @@ function LD_iIXIY_r() {
         LD L,$18
         LD (IY+$FD),L    
     `);
-    SUCCESS = SUCCESS && test("LD_iIXIY_r", outp, new Uint8Array([
+    test("LD_iIXIY_r", outp, new Uint8Array([
         0xDD, 0x21, 0x03, 0x10,     // LD IX,0x1003
         0x3E, 0x12,                 // LD A,0x12
         0xDD, 0x77, 0x00,           // LD (IX+0),A
@@ -398,7 +409,7 @@ function LD_iHL_n() {
         LD HL,$1000
         LD (HL),$65    
     `);
-    SUCCESS = SUCCESS && test("LD_iHL_n", outp, new Uint8Array([
+    test("LD_iHL_n", outp, new Uint8Array([
         0x21, 0x00, 0x20,   // LD HL,0x2000
         0x36, 0x33,         // LD (HL),0x33
         0x21, 0x00, 0x10,   // LD HL,0x1000
@@ -415,7 +426,7 @@ function LD_iIXIY_n() {
         LD (IY+1),$22
         LD (IY+$FF),$44    
     `);
-    SUCCESS = SUCCESS && test("LD_iIXIY_n", outp, new Uint8Array([
+    test("LD_iIXIY_n", outp, new Uint8Array([
         0xDD, 0x21, 0x00, 0x20,     // LD IX,0x2000
         0xDD, 0x36, 0x02, 0x33,     // LD (IX+2),0x33
         0xDD, 0x36, 0xFE, 0x11,     // LD (IX-2),0x11
@@ -433,7 +444,7 @@ function LD_A_iBCDEnn() {
         LD A,(DE)
         LD A,($1002)
     `);
-    SUCCESS = SUCCESS && test("LD_A_iBCDEnn", outp, new Uint8Array([
+    test("LD_A_iBCDEnn", outp, new Uint8Array([
         0x01, 0x00, 0x10,   // LD BC,0x1000
         0x11, 0x01, 0x10,   // LD DE,0x1001
         0x0A,               // LD A,(BC)
@@ -451,7 +462,7 @@ function LD_iBCDEnn_A() {
         LD (DE),A
         LD ($1002),A    
     `);
-    SUCCESS = SUCCESS && test("LD_iBCDEnn_A", outp, new Uint8Array([
+    test("LD_iBCDEnn_A", outp, new Uint8Array([
         0x01, 0x00, 0x10,   // LD BC,0x1000
         0x11, 0x01, 0x10,   // LD DE,0x1001
         0x3E, 0x77,         // LD A,0x77
@@ -470,7 +481,7 @@ function LD_HLddIXIY_inn() {
         LD IX,($1005)
         LD IY,($1006)    
     `);
-    SUCCESS = SUCCESS && test("LD_HLddIXIY_inn", outp, new Uint8Array([
+    test("LD_HLddIXIY_inn", outp, new Uint8Array([
         0x2A, 0x00, 0x10,           // LD HL,(0x1000)
         0xED, 0x4B, 0x01, 0x10,     // LD BC,(0x1001)
         0xED, 0x5B, 0x02, 0x10,     // LD DE,(0x1002)
@@ -495,7 +506,7 @@ function LD_inn_HLddIXIY() {
         LD IY,$8765
         LD ($100C),IY    
     `);
-    SUCCESS = SUCCESS && test("LD_inn_HLddIXIY", outp, new Uint8Array([
+    test("LD_inn_HLddIXIY", outp, new Uint8Array([
         0x21, 0x01, 0x02,           // LD HL,0x0201
         0x22, 0x00, 0x10,           // LD (0x1000),HL
         0x01, 0x34, 0x12,           // LD BC,0x1234
@@ -520,7 +531,7 @@ function LD_SP_HLIXIY() {
         LD SP,IX
         LD SP,IY    
     `);
-    SUCCESS = SUCCESS && test("LD_SP_HLIXIY", outp, new Uint8Array([
+    test("LD_SP_HLIXIY", outp, new Uint8Array([
         0x21, 0x34, 0x12,           // LD HL,0x1234
         0xDD, 0x21, 0x78, 0x56,     // LD IX,0x5678
         0xFD, 0x21, 0xBC, 0x9A,     // LD IY,0x9ABC
@@ -536,7 +547,7 @@ function LD_IR_A() {
         LD I,A
         LD R,A    
     `);
-    SUCCESS = SUCCESS && test("LD_IR_A", outp, new Uint8Array([
+    test("LD_IR_A", outp, new Uint8Array([
         0x3E, 0x45,     // LD A,0x45
         0xED, 0x47,     // LD I,A
         0xED, 0x4F,     // LD R,A
@@ -548,7 +559,7 @@ function LD_A_RI() {
         LD A,I
         LD A,R
     `);
-    SUCCESS = SUCCESS && test("LD_A_RI", outp, new Uint8Array([
+    test("LD_A_RI", outp, new Uint8Array([
         0xED, 0x57,         // LD A,I
         0xED, 0x5F,         // LD A,R        
     ]));
@@ -568,6 +579,10 @@ LD_inn_HLddIXIY();
 LD_SP_HLIXIY();
 LD_IR_A();
 LD_A_RI();
-if (!SUCCESS) {
-    console.log("FAILED!!!");
+
+if (NumErrors === 0) {
+    console.log(chalk.green("\n\nALL TESTS OK!"));
+}
+else {
+    console.log(chalk.red(`\n\n${NumErrors} TEST(S) FAILED!`));
 }
