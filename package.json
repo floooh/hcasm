@@ -17,9 +17,8 @@
   },
   "homepage": "https://github.com/floooh/hcasm#readme",
   "devDependencies": {
-    "@types/node": "^4.0.38"
-  },
-  "dependencies": {
+    "@types/node": "^4.0.38",
     "chalk": "^2.3.2"
-  }
+  },
+  "dependencies": {}
 }
